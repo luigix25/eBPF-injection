@@ -302,6 +302,7 @@ static irqreturn_t irq_handler(int irq, void *dev){
 				pr_info("handling irq 22 for INIT\n");
 				//init_handler();
 				pr_info("waking up interruptible process...\n");
+				flag = 1;
 				wake_up_interruptible(&wq);
 		}
 
