@@ -7,4 +7,5 @@ cp /home/giacomo/myvm/data/myprog.c /home/giacomo/Desktop/tesi/linux/samples/bpf
 cd /home/giacomo/Desktop/tesi/linux
 make M=samples/bpf
 
-cp samples/bpf/myprog.o /home/giacomo/myvm/shared/test/programs/mytestprog.o
+sudo cp samples/bpf/myprog.o /home/giacomo/myvm/shared/test/programs/mytestprog.o
+sudo cp samples/bpf/myprog.o /home/giacomo/myvm/data/mytestprog.o

@@ -57,6 +57,8 @@ Grep QEMU source for the device description, and keep it open at all times!
 
 #include <linux/wait.h>		//linux wait_queue
 
+#include "bpf_injection_msg.h"	
+
 
 /* Each PCI device has 6 BAR IOs (base address register) as per the PCI spec.
  *
@@ -121,9 +123,11 @@ Grep QEMU source for the device description, and keep it open at all times!
 #define DEV_NAME "newdev"
 #define EDU_DEVICE_ID 0x11ea
 
-#define NEWDEV_REG_STATUS_IRQ   0
-#define NEWDEV_REG_RAISE_IRQ    8
-#define NEWDEV_REG_LOWER_IRQ    4
+#define NEWDEV_REG_STATUS_IRQ   0	//read
+#define NEWDEV_REG_LOWER_IRQ    4	//write
+#define NEWDEV_REG_RAISE_IRQ    8	//write (unused in this driver)
+#define NEWDEV_REG_DOORBELL		8
+#define NEWDEV_REG_SETAFFINITY	12
 
 #define QEMU_VENDOR_ID 0x1234
 
@@ -139,7 +143,8 @@ Grep QEMU source for the device description, and keep it open at all times!
 
 
 #define SIG_TEST 44
-#define IOCTL_SET_VARIABLES 13
+#define IOCTL_SCHED_SETAFFINITY 13
+#define IOCTL_PROGRAM_INJECTION_RESULT_READY 14
 
 
 MODULE_LICENSE("GPL");
@@ -150,12 +155,12 @@ static struct pci_device_id pci_ids[] = {
 };
 MODULE_DEVICE_TABLE(pci, pci_ids);
 
+static int payload_left;
 static int flag;
 static int pci_irq;
 static int major;
 static struct pci_dev *pdev;
 static void __iomem *bufmmio;
-static int pid; // Stores application PID in user space
 static DECLARE_WAIT_QUEUE_HEAD(wq);		//wait queue static declaration
 
 
@@ -163,19 +168,39 @@ static ssize_t read(struct file *filp, char __user *buf, size_t len, loff_t *off
 {
 	ssize_t ret;
 	u32 kbuf;
+	struct bpf_injection_msg_header myheader;
 
-	pr_info("READ SIZE=%ld, OFF=%lld", len, *off);
-	printk(KERN_INFO "Inside read\n");
-	printk(KERN_INFO "Scheduling Out\n");
-	wait_event_interruptible(wq, flag == 1);
-	flag = 0;
-	printk(KERN_INFO "Woken Up\n");
+	// pr_info("READ SIZE=%ld, OFF=%lld", len, *off);
+	// printk(KERN_INFO "Inside read\n");
+	// printk(KERN_INFO "Scheduling Out\n");
+	wait_event_interruptible(wq, flag >= 1);
+	
+	printk(KERN_INFO "Woken Up flag:%d\n", flag);
 
 	if (*off % 4 || len == 0) {
-		pr_info("read off=%lld or size=%ld error, NOT ALIGNED 4!\n", *off, len);
+		// pr_info("read off=%lld or size=%ld error, NOT ALIGNED 4!\n", *off, len);
 		ret = 0;
 	} else {
+		// pr_info("filp->fpos:\t%lld\n", filp->f_pos);
 		kbuf = ioread32(bufmmio + *off);
+
+		// pr_info("After ioread=>\tfilp->fpos:\t%lld\n", filp->f_pos);
+		// pr_info("ioread32: %x\n", kbuf);
+
+		if(flag == 2){
+			memcpy(&myheader, &kbuf, sizeof(kbuf));
+			pr_info("  Version:%u\n  Type:%u\n  Payload_len:%u\n", myheader.version, myheader.type, myheader.payload_len);
+			payload_left = myheader.payload_len;// + 12;
+			flag = 1;
+		}
+		else if(flag == 1){
+			payload_left -= len;
+			if(payload_left <= 0){
+				// pr_info("flag reset to 0\n");
+				flag = 0;
+			}
+		}
+
 		if (copy_to_user(buf, (void *)&kbuf, 4)) {
 			ret = -EFAULT;
 		} else {
@@ -183,7 +208,7 @@ static ssize_t read(struct file *filp, char __user *buf, size_t len, loff_t *off
 			*off += 4;
 		}
 	}
-	pr_info("READ\n");
+	// pr_info("READ\n");
 
 
 
@@ -215,31 +240,45 @@ static loff_t llseek(struct file *filp, loff_t off, int whence)
 {
 	loff_t newpos;
 
-  switch(whence) {
-   case 0: /* SEEK_SET */
-    newpos = off;
-    break;
+  	switch(whence) {
+   		case 0: /* SEEK_SET */
+		    newpos = off;
+		    break;
 
-   case 1: /* SEEK_CUR */
-    newpos = filp->f_pos + off;
-    break;
+   		case 1: /* SEEK_CUR */
+		    newpos = filp->f_pos + off;
+		    break;
 
-   default: /* can't happen */
-    return -EINVAL;
+   		default: /* can't happen */
+    		return -EINVAL;
   }
-  if (newpos<0) return -EINVAL;
+  if (newpos<0){
+  	return -EINVAL;
+  }
   filp->f_pos = newpos;
   return newpos;
 }
 
-static long newdev_ioctl(struct file *file, unsigned int cmd, unsigned long arg) {    
+static long newdev_ioctl(struct file *file, unsigned int cmd, unsigned long arg) {   
     switch (cmd) {
-        case IOCTL_SET_VARIABLES:
-        	if (copy_from_user(&pid, (int *)arg, sizeof(int))){
+        case IOCTL_PROGRAM_INJECTION_RESULT_READY:
+        	//bpf program result inserted in buffer area as bpf_injection_msg_t
+        	pr_info("response is ready!!! [dev]\n");
+        	iowrite32(1, bufmmio + NEWDEV_REG_DOORBELL);
+        	//signal to device 
+        	break;
+        case IOCTL_SCHED_SETAFFINITY:
+        {
+        	// Retrieve the requested cpu from userspace
+        	// Write in specific region in device to trigger the sched_setaffinity in host system
+        	int requested_cpu;
+        	if (copy_from_user(&requested_cpu, (int *)arg, sizeof(int))){
             	return -EACCES;
           	}
-          	pr_info("pid received: %d\n", pid);
+          	pr_info("IOCTL requested_cpu: %d\n", requested_cpu);
+          	iowrite32(requested_cpu, bufmmio + NEWDEV_REG_SETAFFINITY);
         	break;
+        }        	
 	}
 	return 0;
 }
@@ -257,32 +296,6 @@ static struct file_operations fops = {
 	.unlocked_ioctl = newdev_ioctl,
 };
 
-
-static void init_handler(void){	
-	struct kernel_siginfo info;
-	struct task_struct *t;
-
-	memset(&info, 0, sizeof(struct kernel_siginfo));
-	info.si_signo = SIG_TEST;
-	// This is bit of a trickery: SI_QUEUE is normally used by sigqueue from user space,    and kernel space should use SI_KERNEL. 
-	// But if SI_KERNEL is used the real_time data  is not delivered to the user space signal handler function. */
-	info.si_code = SI_QUEUE;
-	// real time signals may have 32 bits of data.
-	info.si_int = 1234; // Any value you want to send
-	rcu_read_lock();
-	// find the task with that pid
-	t = pid_task(find_pid_ns(pid, &init_pid_ns), PIDTYPE_PID);
-	if (t != NULL) {
-	    rcu_read_unlock();      
-	    if (send_sig_info(SIG_TEST, &info, t) < 0) // send signal
-	        printk("send_sig_info error\n");
-	} else {
-	     printk("pid_task error\n");
-	     rcu_read_unlock();
-	    //return -ENODEV;
-	}
-}
-
 static irqreturn_t irq_handler(int irq, void *dev){
 	int devi;
 	irqreturn_t ret;
@@ -298,12 +311,25 @@ static irqreturn_t irq_handler(int irq, void *dev){
 		pr_info("me handling like a god?\n");
 
 		switch(irq_status){
-			case 22:		//init irq_handler
+			case PROGRAM_INJECTION:
+				pr_info("case PROGRAM_INJECTION irq handler\n");
+				pr_info("waking up interruptible process...\n");
+				flag = 2;
+				wake_up_interruptible(&wq);
+				break;
+			case PROGRAM_INJECTION_AFFINITY:
+				pr_info("case PROGRAM_INJECTION_AFFINITY irq handler\n");
+				pr_info("waking up interruptible process...\n");
+				flag = 2;
+				wake_up_interruptible(&wq);
+				break;
+			case 22:		//init irq_handler (old raw data)
 				pr_info("handling irq 22 for INIT\n");
 				//init_handler();
 				pr_info("waking up interruptible process...\n");
 				flag = 1;
 				wake_up_interruptible(&wq);
+				break;
 		}
 
 		/* Must do this ACK, or else the interrupts just keeps firing. */

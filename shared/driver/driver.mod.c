@@ -1,5 +1,6 @@
-#include <linux/build-salt.h>
 #include <linux/module.h>
+#define INCLUDE_VERMAGIC
+#include <linux/build-salt.h>
 #include <linux/vermagic.h>
 #include <linux/compiler.h>
 
@@ -26,4 +27,4 @@ MODULE_INFO(depends, "");
 
 MODULE_ALIAS("pci:v00001234d000011EAsv*sd*bc*sc*i*");
 
-MODULE_INFO(srcversion, "F8C679336C474451015B089");
+MODULE_INFO(srcversion, "6588DF1D9E48491CBF31D2B");
