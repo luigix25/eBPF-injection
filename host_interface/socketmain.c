@@ -86,7 +86,7 @@ int main (void){
   }
   printf("socket connected\n");
 
-  sleep(2);
+  // sleep(2);
 
 
 
@@ -130,7 +130,7 @@ int main (void){
 
 
 
-  sleep(5);
+  // sleep(5);
   close (sock);
   // exit (EXIT_SUCCESS);
 }

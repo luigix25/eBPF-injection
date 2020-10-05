@@ -22,6 +22,7 @@
 #define SHUTDOWN_REQUEST					15
 #define ERROR								16
 #define RESET								17
+#define PIN_ON_SAME							18
 /* version defines */
 #define DEFAULT_VERSION 					1
 
@@ -35,9 +36,14 @@
 
 struct bpf_injection_msg_header;
 struct bpf_injection_msg_t;
+struct array_elem;
 struct bpf_injection_msg_t prepare_bpf_injection_message(const char* path);	
 void print_bpf_injection_message(struct bpf_injection_msg_header myheader);
 
+struct array_elem {
+	struct bpf_spin_lock lock;
+	u64 cpu_set;
+};
 
 struct bpf_injection_msg_header {
 	uint8_t version;		//version of the protocol
