@@ -36,14 +36,8 @@
 
 struct bpf_injection_msg_header;
 struct bpf_injection_msg_t;
-struct array_elem;
 struct bpf_injection_msg_t prepare_bpf_injection_message(const char* path);	
 void print_bpf_injection_message(struct bpf_injection_msg_header myheader);
-
-struct array_elem {
-	struct bpf_spin_lock lock;
-	u64 cpu_set;
-};
 
 struct bpf_injection_msg_header {
 	uint8_t version;		//version of the protocol
@@ -76,7 +70,7 @@ struct bpf_injection_msg_t prepare_bpf_injection_message(const char* path){
 	  	fseek(fp, 0 , SEEK_SET);// needed for next read from beginning of file
 	  	mymsg.payload = malloc(mymsg.header.payload_len);
 	  	len = fread(mymsg.payload, 1, mymsg.header.payload_len, fp);
-	  	printf("readlen %d\n", len);
+	  	// printf("readlen %d\n", len);
 	  	if(len != mymsg.header.payload_len) {
 	  		printf("Error preparing the message\n");
 	  		mymsg.header.type = ERROR;

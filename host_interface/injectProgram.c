@@ -9,7 +9,6 @@
 #include <sys/sysinfo.h>
 
 #include <sched.h>
-#include <string.h>
 
 // Message structure header+payload
 #include "bpf_injection_msg.h"
@@ -65,12 +64,9 @@ int main (void){
   struct bpf_injection_msg_t mymsg;
   struct cpu_affinity_infos_t myaffinityinfo;
   int len;
-  
-  mymsg.header.version = DEFAULT_VERSION;
-  mymsg.header.type = RESET;
-  mymsg.header.payload_len = sizeof(uint32_t);   
-  mymsg.payload = malloc(sizeof(uint32_t));
-  memset(mymsg.payload, 7, sizeof(uint32_t));
+
+  mymsg = prepare_bpf_injection_message("/home/giacomo/myvm/data/mytestprog.o");  
+  // print_bpf_injection_message(mymsg.header);
 
   /* Create the socket. */
   sock = socket (PF_INET, SOCK_STREAM, 0);
@@ -79,7 +75,7 @@ int main (void){
       perror ("socket (client)");
       exit (EXIT_FAILURE);
     }
-    // printf("socket created\n");
+  // printf("socket created\n");
 
   /* Connect to the server. */
   init_sockaddr (&servername, SERVERHOST, PORT);
@@ -89,7 +85,24 @@ int main (void){
   }
   // printf("socket connected\n");
 
-  // sleep(1);
+  // sleep(2);
+
+
+
+  // len = recv(sock, &(mymsg.header), sizeof(struct bpf_injection_msg_header), 0);
+  // if(len <= 0){
+  //     printf("len <0 error\n");
+  //     return 1;
+  // }
+  // print_bpf_injection_message(mymsg.header);   
+
+  // mymsg.payload = malloc(32);
+
+  // len = recv(sock, mymsg.payload, 32, 0);
+    
+  // printf("Payload:%s\n", (char*)mymsg.payload); 
+
+  // return 0;
 
   // Send eBPF message (program)
   send(sock, &(mymsg.header), sizeof(struct bpf_injection_msg_header), 0);
@@ -97,7 +110,26 @@ int main (void){
   send(sock, mymsg.payload, mymsg.header.payload_len, 0);
   free(mymsg.payload);
 
-  // sleep(1);
+
+  // // sleep(3);
+
+  // //Send cpu affinity infos
+  // printf("This system[host] has %d cpus\n", get_nprocs());
+  // //Assume in this scenario to have n_pCPU >= n_vCPU   [not so smart to set affinity in overbooked system]
+  // myaffinityinfo.n_pCPU = get_nprocs();
+  // myaffinityinfo.n_vCPU = myaffinityinfo.n_pCPU;  //Allocate up to pCPU = n_vCPU  
+
+  
+  // mymsg.header.version = DEFAULT_VERSION;
+  // mymsg.header.type = PROGRAM_INJECTION_AFFINITY;
+  // mymsg.header.payload_len = sizeof(struct cpu_affinity_infos_t);
+  // mymsg.payload = &myaffinityinfo;
+
+  // send_bpf_injection_message(sock, mymsg);
+
+
+
+  // sleep(5);
   close (sock);
   // exit (EXIT_SUCCESS);
 }

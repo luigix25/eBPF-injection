@@ -76,6 +76,11 @@ int main (int argc, char* argv[]){
 		return -1;
 	}
 
+	if(atoi(argv[1]) <= 0){
+		printf("percentage <= 0, returning immediately\n");
+		return 0;
+	}
+
 	test_duration_sec = atoi(argv[2]);
 
 	mymsg.header.version = DEFAULT_VERSION;
@@ -91,7 +96,7 @@ int main (int argc, char* argv[]){
 		perror ("socket (client)");
 		exit (EXIT_FAILURE);
 	}
-	printf("socket created\n");
+	// printf("socket created\n");
 
   /* Connect to the server. */
 	init_sockaddr (&servername, SERVERHOST, PORT);
@@ -99,7 +104,7 @@ int main (int argc, char* argv[]){
 		perror ("connect (client)");
 		exit (EXIT_FAILURE);
 	}
-	printf("socket connected\n");
+	// printf("socket connected\n");
 
   // Send eBPF message (pinonsame)
 	send(sock, &(mymsg.header), sizeof(struct bpf_injection_msg_header), 0);
