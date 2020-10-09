@@ -175,7 +175,7 @@ static ssize_t read(struct file *filp, char __user *buf, size_t len, loff_t *off
 	// printk(KERN_INFO "Scheduling Out\n");
 	wait_event_interruptible(wq, flag >= 1);
 	
-	printk(KERN_INFO "Woken Up flag:%d\n", flag);
+	// printk(KERN_INFO "Woken Up flag:%d\n", flag);
 
 	if (*off % 4 || len == 0) {
 		// pr_info("read off=%lld or size=%ld error, NOT ALIGNED 4!\n", *off, len);

@@ -11,7 +11,6 @@
 #include <sys/ioctl.h>      
 #include <time.h>
 #include <sched.h>
-#include <signal.h>
 #include "trace_helpers.h"
 
 
@@ -46,26 +45,6 @@ struct bpf_injection_msg_t recv_bpf_injection_msg(int fd);
 void print_cpu_set_mask(cpu_set_t* set);
 void print_binary_mask(uint64_t value, int len);
 void print_cpuset_array(cpu_set_t **set_array, int pCPU, int vCPU);
-int isPowerOfTwo(uint64_t n);
-int findPosition(uint64_t n);
-
-
-int isPowerOfTwo(uint64_t n){ 
-    return n && (!(n & (n - 1))); 
-} 
-  
-int findPosition(uint64_t n){ 
-	uint64_t i = 1;
-	int pos = 0;
-    if (!isPowerOfTwo(n)) {
-        return -1;   
-    }
-    while (!(i & n)) { 
-        i = i << 1;
-        ++pos; 
-    }   
-    return pos; 
-}
 
 int saveToFile(const char* path, void* buf, unsigned int len){
 	FILE *f;
@@ -185,7 +164,7 @@ struct bpf_injection_msg_t recv_bpf_injection_msg(int fd){
 
 	while(payload_left > 0){		
 		len = read(fd, mymsg.payload + offset, 4);
-		// printf("Read offset %d\t0x%x\tread %d bytes\n", offset, *((unsigned int *)(mymsg.payload+offset)), len);
+		printf("Read offset %d\t0x%x\tread %d bytes\n", offset, *((unsigned int *)(mymsg.payload+offset)), len);
 		if (len < 0) {
 			perror("read: ");
 			return mymsg;
@@ -244,12 +223,6 @@ int main(void){
 
 					free(mymsg.payload);
 
-					/*
-					*  Default behavior: on new program load, remove previous program 
-					*  (terminate child)
-					*
-					*/
-
 					pid = fork();
 					//error, no parent
 					if(pid == -1){
@@ -260,14 +233,9 @@ int main(void){
 					else if(pid == 0){
 						child_pid = 0;	//i am a child
 					}
-					//parent kill child (if any) then keep looping
+					//parent keep looping
 					else{
-						if(child_pid != -1){
-							kill(child_pid, SIGKILL);
-							printf("killed child\n");
-						}
 						child_pid = pid;
-						printf("%d child\n", child_pid);
 						break;
 					}
 
@@ -278,19 +246,26 @@ int main(void){
 						printf("load_bpf_file error!\n");
 						return 1;
 					}
-					printf("Bpf program successfully loaded.\n");					
+					printf("Bpf program successfully loaded.\n");
+
+					// read_trace_pipe();
 
 					printf("This is my values map fd:%d\n", map_fd[0]);
 					//Wait some time.. then check how many sys_execve invocations and return
 					sleep(1); //always used 20	
 					// read_trace_pipe();
 
+					// {
+					// 	long value;
+					// 	uint32_t index = 0;
+					// 	bpf_map_lookup_elem(map_fd[0], &index, &value);
+					// 	printf("sys_execve has been called for %ld times.\n", value);
+					// }
 					{
 						uint64_t value = 0;
 						uint32_t index = 0;
-						int cpu_index;
+						int i;
 						int val;
-						int i;						
 						cpu_set_t *set;
 						struct timespec tim;
 						int time_count = 0;
@@ -298,51 +273,61 @@ int main(void){
 					    tim.tv_nsec = 50000000L;    //50ms
 
 
+					    // bpf_map_lookup_elem(map_fd[0], &index, &value);	
+					    // printf("value is %lu\n", value);
+					    // return 0;
 
-						while(1){
+						do{
 							nanosleep(&tim, NULL);
-							bpf_map_lookup_elem(map_fd[0], &index, &value);				
+							bpf_map_lookup_elem(map_fd[0], &index, &value);					
 							if(time_count%5==0){
 								// printf("timecount %d\tvalue=%lu\n", time_count, value);
-							}							
-							if(value != 0){								
-								set = CPU_ALLOC(MAX_CPU);
-								for (i=MAX_CPU - 1; i > 0; i--){	//>0 because 0 is count
-									bpf_map_lookup_elem(map_fd[0], &i, &value);									
-									if(value != 0){
-									    memcpy(set, &value, SET_SIZE);
-									    cpu_index = findPosition(value);
-											
-										printf("-----------\n");			
-									    printf("BPF map modified. BPF probe on systemcall sched_setaffinity, bpf map modified.\n");
-									    // printf("A thread requested to tune his cpu affinity.\n");
-									    print_cpu_set_mask(set);
-									    printf("Binary mask: ");
-									    print_binary_mask(value, 2);
-									    if(isPowerOfTwo(value)){
-									    	printf("CPU mask refers to one cpu only. cpu #%d\n", cpu_index);
-									    }
-									    else{
-									    	printf("CPU mask refers to multiple cpus.\n");
-									    }
-									    printf("-----------\n");										    
-
-									    memcpy(set_array[cpu_index], &value, sizeof(uint64_t));
-
-									    val = value;
-									    ioctl(fd, IOCTL_SCHED_SETAFFINITY, &val);
-									    
-										value = 0;
-										index = i;
-										bpf_map_update_elem(map_fd[0], &index, &value, BPF_ANY);
-									}
-								}
-								CPU_FREE(set);
-								index = 0;
-								bpf_map_update_elem(map_fd[0], &index, &value, BPF_ANY);
 							}
-						}	
-						time_count++;				    
+						} while(value == 0);
+
+					    set = CPU_ALLOC(MAX_CPU);
+					    memcpy(set, &value, SET_SIZE);
+							
+						printf("-----------\n");			
+					    printf("BPF map modified. BPF probe on systemcall sched_setaffinity triggered.\n");
+					    printf("A thread requested to tune his cpu affinity.\n");
+					    print_cpu_set_mask(set);
+					    printf("Binary mask: ");
+					    print_binary_mask(value, 2);
+					    if(value == 1 || value % 2 == 0){
+					    	printf("cpu mask refers to one cpu only. cpu #%ld\n", value / 2);
+					    }
+					    else{
+					    	printf("cpu mask refers to multiple cpus.\n");
+					    }
+					    printf("-----------\n");			
+
+					    
+
+					    print_cpuset_array(set_array, 4, 4);
+
+					    memcpy(set_array[value/2], &value, sizeof(uint64_t));
+
+
+						CPU_ZERO_S(SET_SIZE, set);
+					    for(i=0; i<MAX_CPU;i++){
+							if(i!=value/2){
+								CPU_SET_S(i, SET_SIZE, set);
+							}
+						}
+					    for(i=0; i<MAX_CPU; i++){
+					    	if(i!=value/2){
+					    		memcpy(set_array[i], set, SET_SIZE);
+					    	}
+					    }
+					    print_cpuset_array(set_array, 4, 2);
+					    // print_affinity_matrix(affinity_matrix, 8, 8);
+
+					    val = value;
+					    ioctl(fd, IOCTL_SCHED_SETAFFINITY, &val);
+
+
+					    CPU_FREE(set);
 					}
 					break;
 				}

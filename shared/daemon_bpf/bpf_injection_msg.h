@@ -22,6 +22,7 @@
 #define SHUTDOWN_REQUEST					15
 #define ERROR								16
 #define RESET								17
+#define PIN_ON_SAME							18
 /* version defines */
 #define DEFAULT_VERSION 					1
 
@@ -37,7 +38,6 @@ struct bpf_injection_msg_header;
 struct bpf_injection_msg_t;
 struct bpf_injection_msg_t prepare_bpf_injection_message(const char* path);	
 void print_bpf_injection_message(struct bpf_injection_msg_header myheader);
-
 
 struct bpf_injection_msg_header {
 	uint8_t version;		//version of the protocol
@@ -70,7 +70,7 @@ struct bpf_injection_msg_t prepare_bpf_injection_message(const char* path){
 	  	fseek(fp, 0 , SEEK_SET);// needed for next read from beginning of file
 	  	mymsg.payload = malloc(mymsg.header.payload_len);
 	  	len = fread(mymsg.payload, 1, mymsg.header.payload_len, fp);
-	  	printf("readlen %d\n", len);
+	  	// printf("readlen %d\n", len);
 	  	if(len != mymsg.header.payload_len) {
 	  		printf("Error preparing the message\n");
 	  		mymsg.header.type = ERROR;
