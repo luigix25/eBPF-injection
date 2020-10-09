@@ -47,6 +47,6 @@ fi
   -device virtio-net-pci,netdev=ssh \
   -netdev user,id=ssh,hostfwd=tcp::2222-:22 \
   -virtfs local,id=sfs,path=shared,security_model=passthrough,mount_tag=shared \
-  -device newdev 
+  -device newdev \
   "$@" \
 ;
