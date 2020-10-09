@@ -1,5 +1,0 @@
-Unable to set affinity for P on 0 : Unknown error -1
-Unable to set affinity for C on 1 : Unknown error -1
-32.299,Unable to set affinity for C on 1 : Unknown error -1
-Unable to set affinity for P on 0 : Unknown error -1
-31.857
