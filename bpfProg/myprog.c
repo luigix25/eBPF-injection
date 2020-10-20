@@ -1,9 +1,26 @@
-/* Copyright (c) 2013-2015 PLUMgrid, http://plumgrid.com
+/*
+ * BPF program to monitor CPU affinity tuning
+ * 2020 Giacomo Pellicci
  *
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of version 2 of the GNU General Public
- * License as published by the Free Software Foundation.
+ * Permission is hereby granted, free of charge, to any person obtaining a
+ * copy of this software and associated documentation files (the "Software"),
+ * to deal in the Software without restriction, including without limitation
+ * the rights to use, copy, modify, merge, publish, distribute, sublicense,
+ * and/or sell copies of the Software, and to permit persons to whom the
+ * Software is furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+ * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+ * DEALINGS IN THE SOFTWARE.
  */
+
 #include <linux/skbuff.h>
 #include <linux/netdevice.h>
 #include <uapi/linux/bpf.h>
@@ -17,16 +34,9 @@
 #define _(P) ({typeof(P) val = 0; bpf_probe_read(&val, sizeof(val), &P); val;})
 #define MAX_ENTRIES 64
 
-// struct {
-// 	__uint(type, BPF_MAP_TYPE_HASH);
-// 	__type(key, int);
-// 	__type(value, u32);
-// 	__uint(max_entries, 32);
-// } values SEC(".maps");
 
 // Using BPF_MAP_TYPE_ARRAY map type all array elements pre-allocated 
 // and zero initialized at init time
-
 
 struct bpf_map_def SEC("maps") values = {
 	.type = BPF_MAP_TYPE_ARRAY,
@@ -54,17 +64,17 @@ struct bpf_map_def SEC("maps") values = {
 SEC("kprobe/sched_setaffinity")
 int bpf_prog1(struct pt_regs *ctx){
 	int ret;
-	int pid;
+	// int pid;
 	u64 cpu_set;
 	u64 *top;
 	u32 index = 0;
 
-	char fmt[] = "cpu_set %lu\n";
+	// char fmt[] = "cpu_set %lu\n";
 	// bpf_trace_printk(fmt, sizeof(fmt), cpu_set);
 
-	// Read from user_mask_ptr (3rd parameter of syscall), which is a user-space address
+	// Read from onst struct cpumask *new_mask (2nd parameter)
 	
-	pid = (int)PT_REGS_PARM1(ctx);
+	// pid = (int)PT_REGS_PARM1(ctx);
 	ret = bpf_probe_read(&cpu_set, 8, (void*)PT_REGS_PARM2(ctx));
 
 	top = bpf_map_lookup_elem(&values, &index);	
