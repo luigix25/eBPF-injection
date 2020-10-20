@@ -1,3 +1,26 @@
+/*
+ * BPF program injection
+ * 2020 Giacomo Pellicci
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a
+ * copy of this software and associated documentation files (the "Software"),
+ * to deal in the Software without restriction, including without limitation
+ * the rights to use, copy, modify, merge, publish, distribute, sublicense,
+ * and/or sell copies of the Software, and to permit persons to whom the
+ * Software is furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+ * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+ * DEALINGS IN THE SOFTWARE.
+ */
+
 #define _GNU_SOURCE
 #include <stdio.h>
 #include <stdlib.h>
@@ -85,9 +108,8 @@ int main (void){
   }
   // printf("socket connected\n");
 
-  // sleep(2);
 
-
+  // -- Receive routine
 
   // len = recv(sock, &(mymsg.header), sizeof(struct bpf_injection_msg_header), 0);
   // if(len <= 0){
@@ -104,6 +126,9 @@ int main (void){
 
   // return 0;
 
+  // ------------------
+
+
   // Send eBPF message (program)
   send(sock, &(mymsg.header), sizeof(struct bpf_injection_msg_header), 0);
 
@@ -111,25 +136,6 @@ int main (void){
   free(mymsg.payload);
 
 
-  // // sleep(3);
-
-  // //Send cpu affinity infos
-  // printf("This system[host] has %d cpus\n", get_nprocs());
-  // //Assume in this scenario to have n_pCPU >= n_vCPU   [not so smart to set affinity in overbooked system]
-  // myaffinityinfo.n_pCPU = get_nprocs();
-  // myaffinityinfo.n_vCPU = myaffinityinfo.n_pCPU;  //Allocate up to pCPU = n_vCPU  
-
-  
-  // mymsg.header.version = DEFAULT_VERSION;
-  // mymsg.header.type = PROGRAM_INJECTION_AFFINITY;
-  // mymsg.header.payload_len = sizeof(struct cpu_affinity_infos_t);
-  // mymsg.payload = &myaffinityinfo;
-
-  // send_bpf_injection_message(sock, mymsg);
-
-
-
-  // sleep(5);
   close (sock);
   // exit (EXIT_SUCCESS);
 }
