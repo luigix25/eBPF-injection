@@ -1,0 +1,1 @@
+Trivial tests for CPU affinity
