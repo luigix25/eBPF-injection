@@ -1,0 +1,1 @@
+Use this script in guest home dir. 
