@@ -1,3 +1,26 @@
+/*
+ * BPF guest daemon
+ * 2020 Giacomo Pellicci
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a
+ * copy of this software and associated documentation files (the "Software"),
+ * to deal in the Software without restriction, including without limitation
+ * the rights to use, copy, modify, merge, publish, distribute, sublicense,
+ * and/or sell copies of the Software, and to permit persons to whom the
+ * Software is furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+ * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+ * DEALINGS IN THE SOFTWARE.
+ */
+
 #define _GNU_SOURCE
 #include <unistd.h>
 #include <string.h>
@@ -37,7 +60,6 @@
 
 // Not needed. already declared in bpf_load.h automatically pick up
 // All maps in order they are declared in bpf program file (their ELF sections)
-/* values map */
 // static int map_fd[1];
 
 
@@ -214,19 +236,19 @@ int main(void){
 	}
 
 
-	{
-		int i;
-		for(i=0; i<MAX_CPU;i++){
-			set_array[i] = CPU_ALLOC(MAX_CPU);
-			CPU_ZERO_S(SET_SIZE, set_array[i]);
-		}
+	// {
+	// 	int i;
+	// 	for(i=0; i<MAX_CPU;i++){
+	// 		set_array[i] = CPU_ALLOC(MAX_CPU);
+	// 		CPU_ZERO_S(SET_SIZE, set_array[i]);
+	// 	}
 		// print_cpuset_array(set_array, 4, 4);
 		// return 0;
-	}
+	// }
 
 
 
-	// Read bpf_injection_message HOST -> GUEST
+	// ----- Read bpf_injection_message HOST -> GUEST
 
 	while(1){
 		mymsg = recv_bpf_injection_msg(fd);
@@ -302,9 +324,9 @@ int main(void){
 						while(1){
 							nanosleep(&tim, NULL);
 							bpf_map_lookup_elem(map_fd[0], &index, &value);				
-							if(time_count%5==0){
-								// printf("timecount %d\tvalue=%lu\n", time_count, value);
-							}							
+							// if(time_count%5==0){
+							// 	printf("timecount %d\tvalue=%lu\n", time_count, value);
+							// }							
 							if(value != 0){								
 								set = CPU_ALLOC(MAX_CPU);
 								for (i=MAX_CPU - 1; i > 0; i--){	//>0 because 0 is count
@@ -362,17 +384,13 @@ int main(void){
 		}
 	}
 
+// END----- Read bpf_injection_message HOST -> GUEST
 
 
 //-----------
 
 
 
-
-
-
-
-	// END----- Read bpf_injection_message HOST -> GUEST
 
 
 	// Response bpf_injection_msg  GUEST -> HOST

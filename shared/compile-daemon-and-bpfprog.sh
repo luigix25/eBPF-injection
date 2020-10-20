@@ -10,7 +10,6 @@ cp /home/giacomo/eBPF-injection/shared/daemon_bpf/bpf_injection_msg.h /home/giac
 cd /home/giacomo/Desktop/alternate-linux/linux
 make M=samples/bpf
 
-sudo cp samples/bpf/myprog.o /home/giacomo/eBPF-injection/shared/test/programs/mytestprog.o
 sudo cp samples/bpf/myprog.o /home/giacomo/eBPF-injection/bpfProg/mytestprog.o
 sudo cp /home/giacomo/Desktop/alternate-linux/linux/samples/bpf/daemon_bpf /home/giacomo/eBPF-injection/shared/daemon_bpf/daemon_bpf
 sudo chmod 755 /home/giacomo/eBPF-injection/shared/daemon_bpf/daemon_bpf
