@@ -1,25 +1,25 @@
 /*
-Like every other hardware, we could interact with PCI on x86
-using only IO instructions and memory operations.
-
-But PCI is a complex communication protocol that the Linux kernel
-implements beautifully for us, so let's use the kernel API.
-
-This example relies on the QEMU "edu" educational device.
-Grep QEMU source for the device description, and keep it open at all times!
-
--   edu device source and spec in QEMU tree:
-	- https://github.com/qemu/qemu/blob/v2.7.0/hw/misc/edu.c
-	- https://github.com/qemu/qemu/blob/v2.7.0/docs/specs/edu.txt
--   http://www.zarb.org/~trem/kernel/pci/pci-driver.c inb outb runnable example (no device)
--   LDD3 PCI chapter
--   another QEMU device + module, but using a custom QEMU device:
-	- https://github.com/levex/kernel-qemu-pci/blob/31fc9355161b87cea8946b49857447ddd34c7aa6/module/levpci.c
-	- https://github.com/levex/kernel-qemu-pci/blob/31fc9355161b87cea8946b49857447ddd34c7aa6/qemu/hw/char/lev-pci.c
--   https://is.muni.cz/el/1433/podzim2016/PB173/um/65218991/ course given by the creator of the edu device.
-	In Czech, and only describes API
--   http://nairobi-embedded.org/linux_pci_device_driver.html
-*/
+ * Device driver for extensible paravirtualization QEMU device
+ * 2020 Giacomo Pellicci
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a
+ * copy of this software and associated documentation files (the "Software"),
+ * to deal in the Software without restriction, including without limitation
+ * the rights to use, copy, modify, merge, publish, distribute, sublicense,
+ * and/or sell copies of the Software, and to permit persons to whom the
+ * Software is furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+ * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+ * DEALINGS IN THE SOFTWARE.
+ */
 
 #include <linux/processor.h>
 #include <linux/sched.h>
@@ -60,68 +60,11 @@ Grep QEMU source for the device description, and keep it open at all times!
 #include "bpf_injection_msg.h"	
 
 
-/* Each PCI device has 6 BAR IOs (base address register) as per the PCI spec.
- *
- * Each BAR corresponds to an address range that can be used to communicate with the PCI.
- *
- * Eech BAR is of one of the two types:
- *
- * - IORESOURCE_IO: must be accessed with inX and outX
- * - IORESOURCE_MEM: must be accessed with ioreadX and iowriteX
- *   	This is the saner method apparently, and what the edu device uses.
- *
- * The length of each region is defined BY THE HARDWARE, and communicated to software
- * via the configuration registers.
- *
- * The Linux kernel automatically parses the 64 bytes of standardized configuration registers for us.
- *
- * QEMU devices register those regions with:
- *
- *     memory_region_init_io(&edu->mmio, OBJECT(edu), &edu_mmio_ops, edu,
- *                     "edu-mmio", 1 << 20);
- *     pci_register_bar(pdev, 0, PCI_BASE_ADDRESS_SPACE_MEMORY, &edu->mmio);
- *
-
- * Through write operation you can put the kprobe_target kernel symbol string at offset 16
- * Through write operation at offset 0/4 you can register/unregister a kprobe on the kernel symbol 
- * contained at offset 16
-
- *	+----+------------------------------+
- *	|  0 |     	REGISTER_KPROBE 		|
- *	+----+------------------------------+
- *	|  4 |     	UNREGISTER_KPROBE  		|
- *	+----+------------------------------+
- *	|  8 | LOAD KPROBE_TARGET FROM HOST |
- *	+----+------------------------------+
- *	| 12 |            ---	          	|	?bpf program len?
- *	+----+------------------------------+
- *	| 16 |  	KPROBE_TARGET[0] 		|
- *	+----+------------------------------+
- *	| 20 |   	KPROBE_TARGET[1]  		|
- *	+----+------------------------------+
- *	| 24 |   	KPROBE_TARGET[2]  		|
- *	+----+------------------------------+
- *	| 28 |   	KPROBE_TARGET[3]  		|
- *	+----+------------------------------+
- *	| 32 |   	  						|
- *	+----+								+
- *	| 36 |   	  BPF PROGRAM			|	?BPF PROGRAM? -> THIS AREA HAS MAX SIZE
- *	+----+								+	 OF 4096 INSTRUCTIONS
- *	| 40 |		   			  			|    SIZEOF(INSNS) * 4096(MAXBPF INSTRUCT)
- *	+----+------------------------------+
- *					...
- *					...
- *
- *
- *
- **/
-
-
-
 #define NEWDEV_REG_PCI_BAR      0
 #define NEWDEV_BUF_PCI_BAR      1
 #define DEV_NAME "newdev"
-#define EDU_DEVICE_ID 0x11ea
+#define NEWDEV_DEVICE_ID 0x11ea
+#define QEMU_VENDOR_ID 0x1234
 
 #define NEWDEV_REG_STATUS_IRQ   0	//read
 #define NEWDEV_REG_LOWER_IRQ    4	//write
@@ -129,20 +72,6 @@ Grep QEMU source for the device description, and keep it open at all times!
 #define NEWDEV_REG_DOORBELL		8
 #define NEWDEV_REG_SETAFFINITY	12
 
-#define QEMU_VENDOR_ID 0x1234
-
-
-#define BPF_PROG_LEN 			12
-#define BPF_PROG_OFFSET 		32
-
-#define KPROBE_TARGET_OFFSET	16
-#define KPROBE_TARGET_SIZE		4
-
-#define MAX_SYMBOL_LEN			32
-
-
-
-#define SIG_TEST 44
 #define IOCTL_SCHED_SETAFFINITY 13
 #define IOCTL_PROGRAM_INJECTION_RESULT_READY 14
 
@@ -150,7 +79,7 @@ Grep QEMU source for the device description, and keep it open at all times!
 MODULE_LICENSE("GPL");
 
 static struct pci_device_id pci_ids[] = {
-	{ PCI_DEVICE(QEMU_VENDOR_ID, EDU_DEVICE_ID), },
+	{ PCI_DEVICE(QEMU_VENDOR_ID, NEWDEV_DEVICE_ID), },
 	{ 0, }
 };
 MODULE_DEVICE_TABLE(pci, pci_ids);
@@ -284,9 +213,7 @@ static long newdev_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 }
 
 /* These fops are a bit daft since read and write interfaces don't map well to IO registers.
- *
  * One ioctl per register would likely be the saner option. But we are lazy.
- *
  * We use the fact that every IO is aligned to 4 bytes. Misaligned reads means EOF. */
 static struct file_operations fops = {
 	.owner   = THIS_MODULE,
@@ -414,9 +341,6 @@ static int myinit(void)
 
 static void myexit(void)
 {
-	// kfree(my_kprobe);
-	// unregister_kprobe(&kp);
-	// pr_info("kprobe at %p unregistered\n", kp.addr);
 	pci_unregister_driver(&pci_driver);
 
 }
