@@ -10,14 +10,15 @@
 */
 
 /* type defines */
-#define PROGRAM_INJECTION 					1
-#define PROGRAM_INJECTION_RESULT 			2
-#define PROGRAM_INJECTION_AFFINITY 			3
-#define PROGRAM_INJECTION_AFFINITY_RESULT	4
-#define SHUTDOWN_REQUEST					15
+#define PROGRAM_INJECTION 						1
+#define PROGRAM_INJECTION_RESULT 					2
+#define PROGRAM_INJECTION_AFFINITY 					3
+#define PROGRAM_INJECTION_AFFINITY_RESULT				4
+#define SHUTDOWN_REQUEST						15
 #define ERROR								16
 #define RESET								17
 #define PIN_ON_SAME							18
+#define HT_REMAPPING							19
 /* version defines */
 #define DEFAULT_VERSION 					1
 
