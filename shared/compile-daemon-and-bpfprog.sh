@@ -1,15 +1,18 @@
 #!/usr/bin/env bash
 
+path_to_linux=/home/luigi/Desktop/pellicci/linux-5.10
+path_to_source=/home/luigi/Desktop/pellicci/eBPF-injection
+
 set -eux
 
-rm -rf /home/giacomo/Desktop/alternate-linux/linux/samples/bpf/myprog.c
-rm -rf /home/giacomo/Desktop/alternate-linux/linux/samples/bpf/daemon_bpf.c
-cp /home/giacomo/eBPF-injection/bpfProg/myprog.c /home/giacomo/Desktop/alternate-linux/linux/samples/bpf/myprog.c
-cp /home/giacomo/eBPF-injection/shared/daemon_bpf/daemon_bpf.c /home/giacomo/Desktop/alternate-linux/linux/samples/bpf/daemon_bpf.c
-cp /home/giacomo/eBPF-injection/shared/daemon_bpf/bpf_injection_msg.h /home/giacomo/Desktop/alternate-linux/linux/samples/bpf/bpf_injection_msg.h
-cd /home/giacomo/Desktop/alternate-linux/linux
+rm -rf $path_to_linux/samples/bpf/myprog.c
+rm -rf $path_to_linux/samples/bpf/daemon_bpf.c
+cp $path_to_source/bpfProg/myprog.c $path_to_linux/samples/bpf/myprog.c
+cp $path_to_source/shared/daemon_bpf/daemon_bpf.c $path_to_linux/samples/bpf/daemon_bpf.c
+cp $path_to_source/shared/daemon_bpf/bpf_injection_msg.h $path_to_linux/samples/bpf/bpf_injection_msg.h
+cd $path_to_linux
 make M=samples/bpf
 
-sudo cp samples/bpf/myprog.o /home/giacomo/eBPF-injection/bpfProg/mytestprog.o
-sudo cp /home/giacomo/Desktop/alternate-linux/linux/samples/bpf/daemon_bpf /home/giacomo/eBPF-injection/shared/daemon_bpf/daemon_bpf
-sudo chmod 755 /home/giacomo/eBPF-injection/shared/daemon_bpf/daemon_bpf
+cp samples/bpf/myprog.o $path_to_source/bpfProg/mytestprog.o
+cp $path_to_linux/samples/bpf/daemon_bpf $path_to_source/shared/daemon_bpf/daemon_bpf
+chmod 755 $path_to_source/shared/daemon_bpf/daemon_bpf

@@ -6,4 +6,4 @@ all: injectProgram.c bpf_injection_msg.h reset.c pinonsame.c
 	gcc pinonsame.c bpf_injection_msg.h -o pinonsame
 
 clean:
-	-rm -f socketmain reset pinonsame
+	-rm -f socketmain reset pinonsame *.o
