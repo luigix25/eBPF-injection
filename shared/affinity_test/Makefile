@@ -1,10 +1,22 @@
+CC=gcc
+CFLAGS=-Wall -Wextra -pedantic -O2
+BUILD_DIR=build
 
 
-all: affinity_test.c yield_affinity_test.c split_thread_test.c complex.c
-	gcc affinity_test.c -o affinity_test -lpthread
-	gcc yield_affinity_test.c -o yield_affinity_test -lpthread
-	gcc split_thread_test.c -o split_thread_test -lpthread
-	gcc complex.c -o complex -lpthread
+all: affinity_test yield_affinity_test split_thread_test complex
+
+affinity_test: affinity_test.c
+	$(CC) $(CFLAGS) affinity_test.c -o ${BUILD_DIR}/affinity_test -lpthread
+
+yield_affinity_test: yield_affinity_test.c
+	$(CC) $(CFLAGS) yield_affinity_test.c -o ${BUILD_DIR}/yield_affinity_test -lpthread
+
+split_thread_test: split_thread_test.c
+	$(CC) $(CFLAGS) split_thread_test.c -o ${BUILD_DIR}/split_thread_test -lpthread
+
+complex: complex.c
+	$(CC) $(CFLAGS) complex.c -o ${BUILD_DIR}/complex -lpthread
+
 
 clean:
-	rm -f affinity_test
+	rm -f build/*
