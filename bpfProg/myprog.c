@@ -21,15 +21,15 @@
  * DEALINGS IN THE SOFTWARE.
  */
 
-#include <linux/skbuff.h>
-#include <linux/netdevice.h>
 #include <uapi/linux/bpf.h>
 #include <linux/version.h>
-#include <linux/ptrace.h>
+#include <linux/types.h>
 
+#include <asm/ptrace.h>
 
 #include <bpf/bpf_helpers.h>
 #include <bpf/bpf_tracing.h>
+
 
 #define _(P) ({typeof(P) val = 0; bpf_probe_read(&val, sizeof(val), &P); val;})
 #define MAX_ENTRIES 64

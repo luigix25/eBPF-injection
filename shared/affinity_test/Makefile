@@ -3,19 +3,19 @@ CFLAGS=-Wall -Wextra -pedantic -O2
 BUILD_DIR=build
 
 
-all: affinity_test yield_affinity_test split_thread_test complex
+all: ${BUILD_DIR}/affinity_test ${BUILD_DIR}/yield_affinity_test ${BUILD_DIR}/split_thread_test ${BUILD_DIR}/complex
 
-affinity_test: affinity_test.c
-	$(CC) $(CFLAGS) affinity_test.c -o ${BUILD_DIR}/affinity_test -lpthread
+${BUILD_DIR}/affinity_test: affinity_test.c
+	$(CC) $(CFLAGS) $< -o $@ -lpthread
 
-yield_affinity_test: yield_affinity_test.c
-	$(CC) $(CFLAGS) yield_affinity_test.c -o ${BUILD_DIR}/yield_affinity_test -lpthread
+${BUILD_DIR}/yield_affinity_test: yield_affinity_test.c
+	$(CC) $(CFLAGS) $< -o $@ -lpthread
 
-split_thread_test: split_thread_test.c
-	$(CC) $(CFLAGS) split_thread_test.c -o ${BUILD_DIR}/split_thread_test -lpthread
+${BUILD_DIR}/split_thread_test: split_thread_test.c
+	$(CC) $(CFLAGS) $< -o $@ -lpthread
 
-complex: complex.c
-	$(CC) $(CFLAGS) complex.c -o ${BUILD_DIR}/complex -lpthread
+${BUILD_DIR}/complex: complex.c
+	$(CC) $(CFLAGS) $< -o $@ -lpthread
 
 
 clean:
