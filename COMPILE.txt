@@ -1,0 +1,23 @@
+for eBPF programs
+
+inside a vanilla kernel run:
+
+1) make defconfig
+2) make asm-generic
+3) make modules_prepare
+
+#can be handy
+*) make headers_install 
+
+
+Makefile inside samples/bpf
+
+for userspace programs:
+
+tprogs-y := myprogram
+
+for dependencies:
+myprogram-objs := myprogram.o dependency.o
+
+for kernelspace programs:
+always-y := myprog.o
