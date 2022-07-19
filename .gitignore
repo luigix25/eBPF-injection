@@ -1,3 +1,17 @@
-*.o
+#Driver Related Files
+Module.*
+.Module*
 
+modules.*
+.modules*
+
+*.o
+*.cmd
+*.mod
+*.ko
+*.mod.c
+*.ko.cmd
+*.mod.cmd
+
+#Host Interface Files
 host_interface/build
