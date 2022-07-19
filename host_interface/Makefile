@@ -1,9 +1,18 @@
+BUILD_DIR=build
+
 default: all
 
-all: injectProgram.c bpf_injection_msg.h reset.c pinonsame.c
-	gcc injectProgram.c bpf_injection_msg.h -o injectProgram
-	gcc reset.c bpf_injection_msg.h -o reset
-	gcc pinonsame.c bpf_injection_msg.h -o pinonsame
+all: injectProgram reset pinonsame
+
+
+injectProgram: injectProgram.c bpf_injection_msg.h
+	gcc injectProgram.c bpf_injection_msg.h -o ${BUILD_DIR}/injectProgram
+
+reset: reset.c bpf_injection_msg.h
+	gcc reset.c bpf_injection_msg.h -o ${BUILD_DIR}/reset
+
+pinonsame: pinonsame.c bpf_injection_msg.h
+	gcc pinonsame.c bpf_injection_msg.h -o ${BUILD_DIR}/pinonsame
 
 clean:
-	-rm -f socketmain reset pinonsame *.o
+	-rm -f *.o ${BUILD_DIR}/*
