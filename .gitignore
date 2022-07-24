@@ -13,8 +13,5 @@ modules.*
 *.ko.cmd
 *.mod.cmd
 
-#Host Interface Files
-host_interface/build
-shared/*/build
-
-bpfProg/build
+#All Build Folders
+build/

@@ -3,12 +3,14 @@ LINUXINCLUDE := -I${PATH_LIB}/build/include
 BUILD_DIR=build
 CC=clang
 
+folder:=$(shell mkdir -vp ${BUILD_DIR})
+
 all: ${BUILD_DIR}/bpf_probe
 
 ${BUILD_DIR}/bpf_probe: myprog.c
 	$(CC) -Wall $(LINUXINCLUDE) -D__TARGET_ARCH_x86 -O2 -target bpf -g -c $< -o $@
 
 clean:
-	rm -f build/*
+	rm -f ${BUILD_DIR}/*
 
 .PHONY: all

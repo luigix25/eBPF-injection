@@ -2,6 +2,7 @@ CC=gcc
 CFLAGS=-Wall -Wextra -pedantic -O2
 BUILD_DIR=build
 
+folder:=$(shell mkdir -vp ${BUILD_DIR})
 
 all: ${BUILD_DIR}/affinity_test ${BUILD_DIR}/yield_affinity_test ${BUILD_DIR}/split_thread_test ${BUILD_DIR}/complex
 
@@ -19,4 +20,4 @@ ${BUILD_DIR}/complex: complex.c
 
 
 clean:
-	rm -f build/*
+	rm -f ${BUILD_DIR}/*
