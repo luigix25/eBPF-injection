@@ -35,7 +35,8 @@
 #include <time.h>
 #include <sched.h>
 #include <signal.h>
-#include "trace_helpers.h"
+
+//#include "trace_helpers.h"
 
 
 #include "bpf_injection_msg.h"
@@ -48,7 +49,7 @@
 #include <bpf/bpf.h>
 
 #include <bpf/libbpf.h>
-#include "bpf_util.h"
+//#include "bpf_util.h"
 
 
 #define IOCTL_SCHED_SETAFFINITY 13
