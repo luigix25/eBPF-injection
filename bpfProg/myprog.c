@@ -78,10 +78,10 @@ int bpf_prog1(struct pt_regs *ctx){
 	ret = bpf_probe_read(&cpu_set, 8, (void*)PT_REGS_PARM2(ctx));
 
 	top = bpf_map_lookup_elem(&values, &index);	
-	if (!top){		
+	if (!top){ //entry not found!		
 		return 0;
 	}
-	if(*top == MAX_ENTRIES-1){
+	if(*top == MAX_ENTRIES-1){ //map is full
 		return 0;
 	}
 	__sync_fetch_and_add(top, 1);
@@ -92,4 +92,5 @@ int bpf_prog1(struct pt_regs *ctx){
 }
 
 char _license[] SEC("license") = "GPL";
-u32 _version SEC("version") = LINUX_VERSION_CODE;		//Useful because kprobe is NOT a stable ABI. (wrong version fails to be loaded)
+u32 _version SEC("version") = LINUX_VERSION_CODE;		
+//Useful because kprobe is NOT a stable ABI. (wrong version fails to be loaded)
