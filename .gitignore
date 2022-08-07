@@ -15,3 +15,5 @@ modules.*
 
 #All Build Folders
 build/
+
+.vscode/
