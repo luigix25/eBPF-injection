@@ -35,7 +35,7 @@
 #include <string.h>
 
 // Message structure header+payload
-#include "bpf_injection_msg.h"
+#include <bpf_injection_msg.h>
 
 #define PORT            9999
 #define SERVERHOST      "localhost"
@@ -86,7 +86,6 @@ int main (void){
   int sock;
   struct sockaddr_in servername;
   struct bpf_injection_msg_t mymsg;
-  struct cpu_affinity_infos_t myaffinityinfo;
   int len;
   
   mymsg.header.version = DEFAULT_VERSION;

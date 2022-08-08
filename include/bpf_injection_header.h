@@ -1,4 +1,3 @@
-
 /*
 *
 *	Message structure used to exchange information between guest
@@ -32,7 +31,6 @@
 
 struct bpf_injection_msg_header;
 struct bpf_injection_msg_t;
-struct bpf_injection_msg_t prepare_bpf_injection_message(const char* path);	
 void print_bpf_injection_message(struct bpf_injection_msg_header myheader);
 
 struct bpf_injection_msg_header {
@@ -45,10 +43,3 @@ struct bpf_injection_msg_t {
 	struct bpf_injection_msg_header header;
 	void* payload;
 };
-
-struct cpu_affinity_infos_t {
-	uint16_t n_pCPU;
-	uint16_t n_vCPU;
-	//bool* pin;	//unnecessary in message
-};
-

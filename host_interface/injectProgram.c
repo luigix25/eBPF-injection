@@ -34,7 +34,7 @@
 #include <sched.h>
 
 // Message structure header+payload
-#include "bpf_injection_msg.h"
+#include <bpf_injection_msg.h>
 
 #define PORT            9999
 #define SERVERHOST      "localhost"
@@ -80,12 +80,36 @@ void send_bpf_injection_message(int sock, struct bpf_injection_msg_t mymsg){
   send(sock, mymsg.payload, mymsg.header.payload_len, 0);
 }
 
+struct bpf_injection_msg_t prepare_bpf_injection_message(const char* path){
+	struct bpf_injection_msg_t mymsg;
+	int len;
+	mymsg.header.version = DEFAULT_VERSION;
+	mymsg.header.type = PROGRAM_INJECTION;
+	FILE* fp = fopen(path, "r");
+	if(fp) {
+		fseek(fp, 0 , SEEK_END);
+		mymsg.header.payload_len = ftell(fp);	  
+	  	fseek(fp, 0 , SEEK_SET);// needed for next read from beginning of file
+	  	mymsg.payload = malloc(mymsg.header.payload_len);
+	  	len = fread(mymsg.payload, 1, mymsg.header.payload_len, fp);
+	  	// printf("readlen %d\n", len);
+	  	if(len != mymsg.header.payload_len) {
+	  		printf("Error preparing the message\n");
+	  		mymsg.header.type = ERROR;
+	  		fclose(fp);
+	  		free(mymsg.payload);
+	  		return mymsg;
+	  	}
+	  fclose(fp);
+	}
+  	return mymsg;
+}
+
 
 int main (void){
   int sock;
   struct sockaddr_in servername;
   struct bpf_injection_msg_t mymsg;
-  struct cpu_affinity_infos_t myaffinityinfo;
   int len;
 
   mymsg = prepare_bpf_injection_message("/home/giacomo/myvm/data/mytestprog.o");  

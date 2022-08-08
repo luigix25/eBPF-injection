@@ -35,7 +35,7 @@
 #include <string.h>
 #include <time.h> 
 // Message structure header+payload
-#include "bpf_injection_msg.h"
+#include <bpf_injection_msg.h>
 
 #define PORT            9999
 #define SERVERHOST      "localhost"
@@ -87,7 +87,6 @@ int main (int argc, char* argv[]){
 	int sock;
 	struct sockaddr_in servername;
 	struct bpf_injection_msg_t mymsg;
-	struct cpu_affinity_infos_t myaffinityinfo;
 	int len;
 	int test_duration_sec;
 	long long int serial_time;

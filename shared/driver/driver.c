@@ -57,7 +57,7 @@
 
 #include <linux/wait.h>		//linux wait_queue
 
-#include "bpf_injection_msg.h"	
+#include <bpf_injection_header.h>	
 
 
 #define NEWDEV_REG_PCI_BAR      0

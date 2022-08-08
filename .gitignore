@@ -5,6 +5,8 @@ Module.*
 modules.*
 .modules*
 
+.driver*
+
 *.o
 *.cmd
 *.mod
