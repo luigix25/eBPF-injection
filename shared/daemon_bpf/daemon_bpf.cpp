@@ -46,8 +46,7 @@ using namespace std;
 #include <bpf/bpf.h>
 
 #include <bpf/libbpf.h>
-
-#include "../eBPF-injection/include/bpf_injection_msg.h"
+#include <bpf_injection_msg.h>
 
 #define DEBUG
 
