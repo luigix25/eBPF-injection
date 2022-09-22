@@ -80,7 +80,6 @@ bpf_injection_msg_t recv_bpf_injection_msg(int fd){
 	    return mymsg;
 	}
 
-	cout<<"len: "<<len<<endl;
 	print_bpf_injection_message(mymsg.header);
 
 	cout<<"Allocating buffer for payload of "<<mymsg.header.payload_len<<" bytes.."<<endl;
@@ -176,18 +175,43 @@ int main(){
         return -1;
     }
 
-    bpf_injection_msg_t message = recv_bpf_injection_msg(fd);
-    switch (message.header.type){
-        case PROGRAM_INJECTION:
-            if(handleProgramInjection(message) < 0){
-                cerr<<"Generic Error"<<endl;
-                return -1;
+    pid_t pid, child_pid;
+    child_pid = -1;
+
+    while(true){
+
+        bpf_injection_msg_t message = recv_bpf_injection_msg(fd);
+
+        pid = fork();
+        if(pid == -1){
+            cerr<<"Fork failed\n";
+            exit(-1);
+        } else if(pid != 0){            //parent
+            if(child_pid != -1){
+                cout<<"[LOG] Killing Old BPF Program"<<endl;
+                kill(child_pid, SIGKILL);
             }
-            break;
-        
-        default:
-            cout<<"Unrecognized Payload Type: 0x"<<hex<<message.header.type<<"\n";
-            break;
+
+            child_pid = pid;
+            //Parent keeps listening for new messages
+            continue;
+        }
+
+        //Parent will never reach here.
+        //Child will handle the injection
+
+        switch (message.header.type){
+            case PROGRAM_INJECTION:
+                if(handleProgramInjection(message) < 0){
+                    cerr<<"Generic Error"<<endl;
+                    return -1;
+                }
+                break;
+            
+            default:
+                cout<<"Unrecognized Payload Type: 0x"<<hex<<message.header.type<<"\n";
+                break;
+        }
     }
 
 
