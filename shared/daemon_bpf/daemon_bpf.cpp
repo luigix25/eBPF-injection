@@ -64,18 +64,17 @@ using namespace std;
 // in order to trigger some action on the host side
 
 bpf_injection_msg_t recv_bpf_injection_msg(int fd){
-    #warning tolte le varie seek
+    #warning togliere le varie seek
 	bpf_injection_msg_t mymsg;
 	int32_t len, payload_left;	
 	mymsg.header.type = ERROR;
 
-	/* cout<<"Seek to offset 16 bytes.."<<endl;
+	cout<<"Seek to offset 16 bytes.."<<endl;
 	if (lseek(fd, 16, SEEK_SET) < 0) {
 	    perror("lseek: ");
 	    return mymsg;
 	}
 	cout<<"Seeked."<<endl;
-    */
 
 	cout<<"Waiting for a bpf_message_header.."<<endl;
 	len = read(fd, &(mymsg.header), sizeof(bpf_injection_msg_header));
@@ -92,15 +91,6 @@ bpf_injection_msg_t recv_bpf_injection_msg(int fd){
 	cout<<"Buffer allocated"<<endl;
 
 	cout<<"Current file offset is "<<lseek(fd, 0, SEEK_CUR)<<endl;
-
-    /*
-	cout<<"Seek to offset 20 bytes.."<<endl;
-	if (lseek(fd, 20, SEEK_SET) < 0) {
-		perror("lseek: ");
-		return mymsg;
-	}
-	cout<<"Seeked."<<endl;
-    */
 
 	cout<<"Reading chunk by chunk.."<<endl;
 	payload_left = mymsg.header.payload_len;
@@ -127,24 +117,15 @@ int main(int argc,char **argv){
     bpf_program *prog;
     bpf_link *links = NULL;
 
-    if(argc < 2){
-        cout<<"[params] bpf_program"<<endl;
-        return -1;
-    }
-
-	cout<<"Loading bpf program..."<<endl;
+	cout<<"[LOG] Starting Guest Agent"<<endl;
 	
-    #warning utilizzare dispositivo
-    int fd = open(argv[1],O_RDONLY);
+    int fd = open("/dev/newdev",O_RDWR);
     if(fd < 0){
-        cout<<"Error while opening file"<<endl;
+        cout<<"Error while opening device"<<endl;
         return -1;
     }
 
     bpf_injection_msg_t message = recv_bpf_injection_msg(fd);
-
-    if(close(fd) < 0)
-        return -1;
 
     obj = bpf_object__open_mem(message.payload,message.header.payload_len,NULL);
     if (libbpf_get_error(obj)) {
@@ -166,6 +147,7 @@ int main(int argc,char **argv){
         return -1;
     }
 
+    cout<<"BPF Program Type"<<endl;
     cout<<bpf_program__section_name(prog)<<endl;
 
     //int cnt = 0;
@@ -185,15 +167,16 @@ int main(int argc,char **argv){
 	cout<<"Bpf program successfully loaded."<<endl;
     bpf_map *map;
 
-    //Debug: Nome di tutte le mappe
+    //Debug: All Maps Available
+    cout<<"Available Maps:\n";
     bpf_object__for_each_map(map, obj) {
 		const char *name = bpf_map__name(map);
-        cout<<"mappa "<<name<<endl;
+        cout<<"[LOG] map: "<<name<<endl;
     }
 
     int map_fd = bpf_object__find_map_fd_by_name(obj,"values");
     if(map_fd < 0){
-        cerr<<"Error map not found"<<endl;
+        cerr<<"Error map 'values' not found"<<endl;
         return -1;
     }
 
@@ -211,7 +194,7 @@ int main(int argc,char **argv){
         if(n_modified == 0)
             continue; //no changes in BPF map
 
-        cout<<"BPF Map Modified n_modified: "<<n_modified<<endl;
+        cout<<"BPF Map Modified: number of changes "<<n_modified<<endl;
 
         for (uint32_t i=1; i <= n_modified && i < MAX_CPU; i++){
 
@@ -247,7 +230,8 @@ int main(int argc,char **argv){
     //cleanup
 	bpf_link__destroy(links);
     bpf_object__close(obj);
-    
+    close(fd);
+
 	return 0;
 
 }
