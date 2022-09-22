@@ -1,3 +1,5 @@
+#pragma once
+
 /*
 *
 *	Message structure used to exchange information between guest

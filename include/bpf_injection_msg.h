@@ -1,3 +1,4 @@
+#pragma once
 #include "bpf_injection_header.h"
 
 void print_bpf_injection_message(struct bpf_injection_msg_header myheader){
