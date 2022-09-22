@@ -42,11 +42,8 @@
 
 using namespace std;
 
-#include <linux/bpf.h>
-#include <bpf/bpf.h>
-
-#include <bpf/libbpf.h>
 #include <bpf_injection_msg.h>
+#include "BpfLoader.h"
 
 #define DEBUG
 
@@ -111,74 +108,15 @@ bpf_injection_msg_t recv_bpf_injection_msg(int fd){
 	return mymsg;
 }
 
-int main(int argc,char **argv){
+int handleProgramInjection(bpf_injection_msg_t message){
 
-    bpf_object *obj;
-    bpf_program *prog;
-    bpf_link *links = NULL;
-
-	cout<<"[LOG] Starting Guest Agent"<<endl;
-	
-    int fd = open("/dev/newdev",O_RDWR);
-    if(fd < 0){
-        cout<<"Error while opening device"<<endl;
-        return -1;
-    }
-
-    bpf_injection_msg_t message = recv_bpf_injection_msg(fd);
-
-    obj = bpf_object__open_mem(message.payload,message.header.payload_len,NULL);
-    if (libbpf_get_error(obj)) {
-        cout<<"ERROR: opening BPF object file failed"<<endl;
-        return 1;
-    }
-
-    delete[] (uint8_t*)message.payload;
-
-    prog = bpf_object__find_program_by_name(obj, "bpf_prog1");
-    if (!prog) {
-        cout<<"finding a prog in obj file failed"<<endl;
-        return -1;
-    }
-
-    /* load BPF program */
-    if (bpf_object__load(obj)) {
-        cout<<"ERROR: loading BPF object file failed"<<endl;
-        return -1;
-    }
-
-    cout<<"BPF Program Type"<<endl;
-    cout<<bpf_program__section_name(prog)<<endl;
-
-    //int cnt = 0;
-    int err;
-
-    //For Inutile, c'è solamente un programma
-    bpf_object__for_each_program(prog, obj) {
-        links = bpf_program__attach(prog);
-        err = libbpf_get_error(links);
-        if (err < 0) {
-            cerr<<"ERROR: bpf_program__attach failed"<<endl;
-            links = NULL;
-            return err;
-        }
-    }
-
-	cout<<"Bpf program successfully loaded."<<endl;
-    bpf_map *map;
-
-    //Debug: All Maps Available
-    cout<<"Available Maps:\n";
-    bpf_object__for_each_map(map, obj) {
-		const char *name = bpf_map__name(map);
-        cout<<"[LOG] map: "<<name<<endl;
-    }
-
-    int map_fd = bpf_object__find_map_fd_by_name(obj,"values");
+    BpfLoader loader(message);
+    int map_fd = loader.loadAndGetMap();
     if(map_fd < 0){
-        cerr<<"Error map 'values' not found"<<endl;
         return -1;
     }
+
+    cout<<"[LOG] Starting operations"<<endl;
 
     timespec time_period;
     time_period.tv_sec = 0;
@@ -226,10 +164,34 @@ int main(int argc,char **argv){
         bpf_map_update_elem(map_fd, &index, &n_modified, BPF_ANY);
 
     }
+}
+
+int main(){
+
+    cout<<"[LOG] Starting Guest Agent"<<endl;
+	
+    int fd = open("/dev/newdev",O_RDWR);
+    if(fd < 0){
+        cout<<"Error while opening device"<<endl;
+        return -1;
+    }
+
+    bpf_injection_msg_t message = recv_bpf_injection_msg(fd);
+    switch (message.header.type){
+        case PROGRAM_INJECTION:
+            if(handleProgramInjection(message) < 0){
+                cerr<<"Generic Error"<<endl;
+                return -1;
+            }
+            break;
+        
+        default:
+            cout<<"Unrecognized Payload Type: 0x"<<hex<<message.header.type<<"\n";
+            break;
+    }
+
 
     //cleanup
-	bpf_link__destroy(links);
-    bpf_object__close(obj);
     close(fd);
 
 	return 0;
