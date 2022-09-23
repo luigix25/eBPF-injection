@@ -153,6 +153,7 @@ int handleProgramInjection(bpf_injection_msg_t message){
             );
 
             #warning valore passato per riferimento ad ioctl
+            #warning abilitare ioctl
             //ioctl(fd, IOCTL_SCHED_SETAFFINITY, &value);
             cpu_mask = 0;
             bpf_map_update_elem(map_fd, &i, &cpu_mask, BPF_ANY);
