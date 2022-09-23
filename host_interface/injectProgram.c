@@ -106,13 +106,18 @@ struct bpf_injection_msg_t prepare_bpf_injection_message(const char* path){
 }
 
 
-int main (void){
+int main (int argc, char **argv){
+
+  if(argc < 2){
+    printf("[params] /file/to/inject");
+    exit(-1);
+  }
+
   int sock;
   struct sockaddr_in servername;
   struct bpf_injection_msg_t mymsg;
-  int len;
 
-  mymsg = prepare_bpf_injection_message("/home/giacomo/myvm/data/mytestprog.o");  
+  mymsg = prepare_bpf_injection_message(argv[1]);  
   // print_bpf_injection_message(mymsg.header);
 
   /* Create the socket. */
@@ -132,34 +137,26 @@ int main (void){
   }
   // printf("socket connected\n");
 
-
-  // -- Receive routine
-
-  // len = recv(sock, &(mymsg.header), sizeof(struct bpf_injection_msg_header), 0);
-  // if(len <= 0){
-  //     printf("len <0 error\n");
-  //     return 1;
-  // }
-  // print_bpf_injection_message(mymsg.header);   
-
-  // mymsg.payload = malloc(32);
-
-  // len = recv(sock, mymsg.payload, 32, 0);
-    
-  // printf("Payload:%s\n", (char*)mymsg.payload); 
-
-  // return 0;
-
-  // ------------------
-
-
   // Send eBPF message (program)
-  send(sock, &(mymsg.header), sizeof(struct bpf_injection_msg_header), 0);
+  int ret = send(sock, &(mymsg.header), sizeof(struct bpf_injection_msg_header), 0);
+  if(ret == sizeof(struct bpf_injection_msg_header)){
+    printf("tutto ok\n");
+  } else {
+    printf("Inviati %d byte su %lu\n",ret,sizeof(struct bpf_injection_msg_header));
+  }
 
-  send(sock, mymsg.payload, mymsg.header.payload_len, 0);
+  ret = send(sock, mymsg.payload, mymsg.header.payload_len, 0);
+  if(ret == sizeof(struct bpf_injection_msg_header)){
+    printf("tutto ok\n");
+  } else {
+    printf("Inviati %d byte su %d\n",ret,mymsg.header.payload_len);
+  }
+
+
   free(mymsg.payload);
 
 
   close (sock);
-  // exit (EXIT_SUCCESS);
+  return 0;
+
 }
