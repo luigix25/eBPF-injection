@@ -15,6 +15,9 @@ modules.*
 *.ko.cmd
 *.mod.cmd
 
+#qemu disks
+*.qcow2
+
 #All Build Folders
 build/
 
