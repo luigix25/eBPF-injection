@@ -93,7 +93,7 @@ static void __iomem *bufmmio;
 static void __iomem *bufmmio_user;
 static DECLARE_WAIT_QUEUE_HEAD(wq);		//wait queue static declaration
 
-#warning la read legge sempre e solo 4 byte
+#warning la read legge sempre e solo 4 byte; attenzione alla variabile len non consistente con offset
 #warning sistemare la remove
 #warning TODO: allocare buffer (4k) per permettere read di 1 pagina per volta
 
