@@ -90,10 +90,12 @@ static int pci_irq;
 static int major;
 static struct pci_dev *pdev;
 static void __iomem *bufmmio;
+static void __iomem *bufmmio_user;
 static DECLARE_WAIT_QUEUE_HEAD(wq);		//wait queue static declaration
 
 #warning la read legge sempre e solo 4 byte
 #warning sistemare la remove
+#warning TODO: allocare buffer (4k) per permettere read di 1 pagina per volta
 
 static ssize_t read(struct file *filp, char __user *buf, size_t len, loff_t *off)
 {
@@ -115,16 +117,16 @@ static ssize_t read(struct file *filp, char __user *buf, size_t len, loff_t *off
 	}
 	
 	// pr_info("filp->fpos:\t%lld\n", filp->f_pos);
-	kbuf = ioread32(bufmmio + *off);
+	kbuf = ioread32(bufmmio_user + *off);
 
 	// pr_info("After ioread=>\tfilp->fpos:\t%lld\n", filp->f_pos);
 	// pr_info("ioread32: %x\n", kbuf);
 
 	if(flag == 2){
-		#warning memcpy inutile
+		//Initialization of header data
 		memcpy(&myheader, &kbuf, sizeof(kbuf));
 		pr_info("  Version:%u\n  Type:%u\n  Payload_len:%u\n", myheader.version, myheader.type, myheader.payload_len);
-		payload_left = myheader.payload_len;// + 12;
+		payload_left = myheader.payload_len;
 		flag = 1;
 	} else if(flag == 1){
 		payload_left -= len;
@@ -157,7 +159,7 @@ static ssize_t write(struct file *filp, const char __user *buf, size_t len, loff
 		if (copy_from_user((void *)&kbuf, buf, 4) ) { // || len != 4) {
 			ret = -EFAULT;
 		} else {
-			iowrite32(kbuf, bufmmio + *off);			
+			iowrite32(kbuf, bufmmio_user + *off);			
 			*off += 4;
 		}
 	}
@@ -166,29 +168,6 @@ static ssize_t write(struct file *filp, const char __user *buf, size_t len, loff
 	}
 	pr_info("WRITE\n");
 	return ret;
-}
-
-static loff_t llseek(struct file *filp, loff_t off, int whence)
-{
-	loff_t newpos;
-
-  	switch(whence) {
-   		case 0: /* SEEK_SET */
-		    newpos = off;
-		    break;
-
-   		case 1: /* SEEK_CUR */
-		    newpos = filp->f_pos + off;
-		    break;
-
-   		default: /* can't happen */
-    		return -EINVAL;
-  }
-  if (newpos<0){
-  	return -EINVAL;
-  }
-  filp->f_pos = newpos;
-  return newpos;
 }
 
 static long newdev_ioctl(struct file *file, unsigned int cmd, unsigned long arg) {   
@@ -220,7 +199,6 @@ static long newdev_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
  * We use the fact that every IO is aligned to 4 bytes. Misaligned reads means EOF. */
 static struct file_operations fops = {
 	.owner   = THIS_MODULE,
-	.llseek  = llseek,
 	.read    = read,
 	.write   = write,
 	.unlocked_ioctl = newdev_ioctl,
@@ -300,7 +278,7 @@ static int pci_probe(struct pci_dev *dev, const struct pci_device_id *id)
 		goto error;
 	}
 	bufmmio = pci_iomap(pdev, NEWDEV_BUF_PCI_BAR, pci_resource_len(pdev, NEWDEV_BUF_PCI_BAR));
-	
+	bufmmio_user = bufmmio + 16; //skipping memory mapped registers
 
 	/* IRQ setup. */
 	pci_read_config_byte(dev, PCI_INTERRUPT_LINE, &val);
