@@ -92,6 +92,8 @@ static struct pci_dev *pdev;
 static void __iomem *bufmmio;
 static DECLARE_WAIT_QUEUE_HEAD(wq);		//wait queue static declaration
 
+#warning la read legge sempre e solo 4 byte
+#warning sistemare la remove
 
 static ssize_t read(struct file *filp, char __user *buf, size_t len, loff_t *off)
 {
@@ -106,36 +108,37 @@ static ssize_t read(struct file *filp, char __user *buf, size_t len, loff_t *off
 	
 	// printk(KERN_INFO "Woken Up flag:%d\n", flag);
 
-	if (*off % 4 || len == 0) {
+	//Fast Exit: unaligned read or reading 0 bytes
+	if (*off % 4 || len == 0){
 		// pr_info("read off=%lld or size=%ld error, NOT ALIGNED 4!\n", *off, len);
-		ret = 0;
+		return 0;
+	}
+	
+	// pr_info("filp->fpos:\t%lld\n", filp->f_pos);
+	kbuf = ioread32(bufmmio + *off);
+
+	// pr_info("After ioread=>\tfilp->fpos:\t%lld\n", filp->f_pos);
+	// pr_info("ioread32: %x\n", kbuf);
+
+	if(flag == 2){
+		#warning memcpy inutile
+		memcpy(&myheader, &kbuf, sizeof(kbuf));
+		pr_info("  Version:%u\n  Type:%u\n  Payload_len:%u\n", myheader.version, myheader.type, myheader.payload_len);
+		payload_left = myheader.payload_len;// + 12;
+		flag = 1;
+	} else if(flag == 1){
+		payload_left -= len;
+		if(payload_left <= 0){
+			// pr_info("flag reset to 0\n");
+			flag = 0;
+		}
+	}
+
+	if (copy_to_user(buf, (void *)&kbuf, 4)) {
+		ret = -EFAULT;
 	} else {
-		// pr_info("filp->fpos:\t%lld\n", filp->f_pos);
-		kbuf = ioread32(bufmmio + *off);
-
-		// pr_info("After ioread=>\tfilp->fpos:\t%lld\n", filp->f_pos);
-		// pr_info("ioread32: %x\n", kbuf);
-
-		if(flag == 2){
-			memcpy(&myheader, &kbuf, sizeof(kbuf));
-			pr_info("  Version:%u\n  Type:%u\n  Payload_len:%u\n", myheader.version, myheader.type, myheader.payload_len);
-			payload_left = myheader.payload_len;// + 12;
-			flag = 1;
-		}
-		else if(flag == 1){
-			payload_left -= len;
-			if(payload_left <= 0){
-				// pr_info("flag reset to 0\n");
-				flag = 0;
-			}
-		}
-
-		if (copy_to_user(buf, (void *)&kbuf, 4)) {
-			ret = -EFAULT;
-		} else {
-			ret = len;
-			*off += 4;
-		}
+		ret = len;
+		*off += 4;
 	}
 	// pr_info("READ\n");
 
@@ -225,47 +228,47 @@ static struct file_operations fops = {
 
 static irqreturn_t irq_handler(int irq, void *dev){
 	int devi;
-	irqreturn_t ret;
+	//irqreturn_t ret;
 	u32 irq_status;
 
 	devi = *(int *)dev;
-	if (devi == major) {
-		irq_status = ioread32(bufmmio + NEWDEV_REG_STATUS_IRQ);
-
-		//handle
-		pr_info("interrupt irq = %d dev = %d irq_status = 0x%llx\n",
-				irq, devi, (unsigned long long)irq_status);
-		pr_info("me handling like a god?\n");
-
-		switch(irq_status){
-			case PROGRAM_INJECTION:
-				pr_info("case PROGRAM_INJECTION irq handler\n");
-				pr_info("waking up interruptible process...\n");
-				flag = 2;
-				wake_up_interruptible(&wq);
-				break;
-			case PROGRAM_INJECTION_AFFINITY:
-				pr_info("case PROGRAM_INJECTION_AFFINITY irq handler\n");
-				pr_info("waking up interruptible process...\n");
-				flag = 2;
-				wake_up_interruptible(&wq);
-				break;
-			case 22:		//init irq_handler (old raw data)
-				pr_info("handling irq 22 for INIT\n");
-				//init_handler();
-				pr_info("waking up interruptible process...\n");
-				flag = 1;
-				wake_up_interruptible(&wq);
-				break;
-		}
-
-		/* Must do this ACK, or else the interrupts just keeps firing. */
-		iowrite32(irq_status, bufmmio + NEWDEV_REG_LOWER_IRQ);
-		ret = IRQ_HANDLED;
-	} else {
-		ret = IRQ_NONE;
+	if(devi != major){
+		return IRQ_NONE;
 	}
-	return ret;
+
+	irq_status = ioread32(bufmmio + NEWDEV_REG_STATUS_IRQ);
+
+	//handle
+	pr_info("interrupt irq = %d dev = %d irq_status = 0x%llx\n",
+			irq, devi, (unsigned long long)irq_status);
+	pr_info("me handling like a god?\n");
+
+	switch(irq_status){
+		case PROGRAM_INJECTION:
+			pr_info("case PROGRAM_INJECTION irq handler\n");
+			pr_info("waking up interruptible process...\n");
+			flag = 2;
+			wake_up_interruptible(&wq);
+			break;
+		case PROGRAM_INJECTION_AFFINITY:
+			pr_info("case PROGRAM_INJECTION_AFFINITY irq handler\n");
+			pr_info("waking up interruptible process...\n");
+			flag = 2;
+			wake_up_interruptible(&wq);
+			break;
+		case 22:		//init irq_handler (old raw data)
+			pr_info("handling irq 22 for INIT\n");
+			//init_handler();
+			pr_info("waking up interruptible process...\n");
+			flag = 1;
+			wake_up_interruptible(&wq);
+			break;
+	}
+
+	/* Must do this ACK, or else the interrupts just keeps firing. */
+	iowrite32(irq_status, bufmmio + NEWDEV_REG_LOWER_IRQ);
+	//ret = IRQ_HANDLED;
+	return IRQ_HANDLED;
 }
 
 /**
