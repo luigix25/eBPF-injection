@@ -61,17 +61,9 @@ using namespace std;
 // in order to trigger some action on the host side
 
 bpf_injection_msg_t recv_bpf_injection_msg(int fd){
-    #warning togliere le varie seek
 	bpf_injection_msg_t mymsg;
 	int32_t len, payload_left;	
 	mymsg.header.type = ERROR;
-
-	cout<<"Seek to offset 16 bytes.."<<endl;
-	if (lseek(fd, 16, SEEK_SET) < 0) {
-	    perror("lseek: ");
-	    return mymsg;
-	}
-	cout<<"Seeked."<<endl;
 
 	cout<<"Waiting for a bpf_message_header.."<<endl;
 	len = read(fd, &(mymsg.header), sizeof(bpf_injection_msg_header));
@@ -86,15 +78,13 @@ bpf_injection_msg_t recv_bpf_injection_msg(int fd){
 	mymsg.payload = new uint8_t[mymsg.header.payload_len];
 	cout<<"Buffer allocated"<<endl;
 
-	cout<<"Current file offset is "<<lseek(fd, 0, SEEK_CUR)<<endl;
-
 	cout<<"Reading chunk by chunk.."<<endl;
 	payload_left = mymsg.header.payload_len;
     uint8_t *addr = static_cast<uint8_t*>(mymsg.payload);
 
 	while(payload_left > 0){	
         	
-		len = read(fd, addr, 4);
+		len = read(fd, addr, payload_left);
 		if (len < 0) {
 			perror("read: ");
 			return mymsg;
