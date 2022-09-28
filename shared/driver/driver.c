@@ -60,7 +60,6 @@
 #include <bpf_injection_header.h>	
 
 
-#define NEWDEV_REG_PCI_BAR      0
 #define NEWDEV_BUF_PCI_BAR      1
 #define DEV_NAME "newdev"
 #define NEWDEV_DEVICE_ID 0x11ea
@@ -74,6 +73,8 @@
 
 #define IOCTL_SCHED_SETAFFINITY 13
 #define IOCTL_PROGRAM_INJECTION_RESULT_READY 14
+
+#define BUFFER_SIZE 65536
 
 
 MODULE_LICENSE("GPL");
@@ -93,13 +94,12 @@ static void __iomem *bufmmio;
 static void __iomem *bufmmio_user;
 static DECLARE_WAIT_QUEUE_HEAD(wq);		//wait queue static declaration
 
-#warning la read legge sempre e solo 4 byte; attenzione alla variabile len non consistente con offset
-#warning sistemare la remove
-#warning TODO: allocare buffer (4k) per permettere read di 1 pagina per volta
+static u8 *read_buffer;
+static u16 first_free_byte;					//index of first free byte
 
 static ssize_t read(struct file *filp, char __user *buf, size_t len, loff_t *off)
 {
-	ssize_t ret;
+	ssize_t ret = 0;
 	u32 kbuf;
 	struct bpf_injection_msg_header myheader;
 
@@ -116,35 +116,56 @@ static ssize_t read(struct file *filp, char __user *buf, size_t len, loff_t *off
 		return 0;
 	}
 	
-	// pr_info("filp->fpos:\t%lld\n", filp->f_pos);
-	kbuf = ioread32(bufmmio_user + *off);
-
-	// pr_info("After ioread=>\tfilp->fpos:\t%lld\n", filp->f_pos);
-	// pr_info("ioread32: %x\n", kbuf);
-
 	if(flag == 2){
 		//Initialization of header data
+		kbuf = ioread32(bufmmio_user); //offset is 0 
+
 		memcpy(&myheader, &kbuf, sizeof(kbuf));
 		pr_info("  Version:%u\n  Type:%u\n  Payload_len:%u\n", myheader.version, myheader.type, myheader.payload_len);
 		payload_left = myheader.payload_len;
+
+		memcpy(read_buffer+first_free_byte,&kbuf,sizeof(kbuf));
+		first_free_byte += 4;
+
+		ret += 4;
+		len -= 4;
+		*off += 4;
+
 		flag = 1;
-	} else if(flag == 1){
-		payload_left -= len;
-		if(payload_left <= 0){
-			// pr_info("flag reset to 0\n");
-			flag = 0;
+
+	} 
+
+	if(len > payload_left)
+		len = payload_left;
+	
+	while(len){
+		kbuf = ioread32(bufmmio_user + *off);
+		memcpy(read_buffer+first_free_byte,&kbuf,sizeof(kbuf));
+
+		first_free_byte += 4;
+
+		if(len < 4){
+			ret += len;
+			*off += len;
+			payload_left -= len;
+			len = 0;
+		} else {
+			ret += 4;
+			*off += 4;
+			payload_left -= 4;
+			len -= 4;
 		}
 	}
-
-	if (copy_to_user(buf, (void *)&kbuf, 4)) {
-		ret = -EFAULT;
-	} else {
-		ret = len;
-		*off += 4;
+	
+	if(payload_left <= 0){
+		flag = 0;
 	}
-	// pr_info("READ\n");
 
+	if (copy_to_user(buf, read_buffer, ret)) {
+		ret = -EFAULT;
+	} 
 
+	first_free_byte = 0;
 
 	return ret;
 }
@@ -206,7 +227,6 @@ static struct file_operations fops = {
 
 static irqreturn_t irq_handler(int irq, void *dev){
 	int devi;
-	//irqreturn_t ret;
 	u32 irq_status;
 
 	devi = *(int *)dev;
@@ -219,7 +239,6 @@ static irqreturn_t irq_handler(int irq, void *dev){
 	//handle
 	pr_info("interrupt irq = %d dev = %d irq_status = 0x%llx\n",
 			irq, devi, (unsigned long long)irq_status);
-	pr_info("me handling like a god?\n");
 
 	switch(irq_status){
 		case PROGRAM_INJECTION:
@@ -245,7 +264,6 @@ static irqreturn_t irq_handler(int irq, void *dev){
 
 	/* Must do this ACK, or else the interrupts just keeps firing. */
 	iowrite32(irq_status, bufmmio + NEWDEV_REG_LOWER_IRQ);
-	//ret = IRQ_HANDLED;
 	return IRQ_HANDLED;
 }
 
@@ -258,6 +276,7 @@ static irqreturn_t irq_handler(int irq, void *dev){
  */
 static int pci_probe(struct pci_dev *dev, const struct pci_device_id *id)
 {
+	#warning gestione errori
 	u8 val;
 
 	pr_info("pci_probe\n");
@@ -267,11 +286,6 @@ static int pci_probe(struct pci_dev *dev, const struct pci_device_id *id)
 		dev_err(&(pdev->dev), "pci_enable_device\n");
 		goto error;
 	}
-	// if (pci_request_region(dev, NEWDEV_REG_PCI_BAR, "myregion0")) {
-	// 	dev_err(&(pdev->dev), "pci_request_region0\n");
-	// 	goto error;
-	// }
-	// io = pci_iomap(pdev, NEWDEV_REG_PCI_BAR, pci_resource_len(pdev, NEWDEV_REG_PCI_BAR));
 
 	if (pci_request_region(dev, NEWDEV_BUF_PCI_BAR, "myregion1")) {
 		dev_err(&(pdev->dev), "pci_request_region1\n");
@@ -289,6 +303,13 @@ static int pci_probe(struct pci_dev *dev, const struct pci_device_id *id)
 	}
 
 	flag = 0;
+
+	read_buffer = kmalloc(BUFFER_SIZE,GFP_KERNEL);
+	if(read_buffer == NULL)
+		return 1;
+
+	first_free_byte = 0;
+
 	pr_info("pci_probe COMPLETED SUCCESSFULLY\n");
 
 	return 0;
@@ -299,9 +320,16 @@ error:
 static void pci_remove(struct pci_dev *dev)
 {
 	pr_info("pci_remove\n");
-	// pci_release_region(dev, NEWDEV_REG_PCI_BAR);
+
+	free_irq(pci_irq, &major); 
+
+	pci_iounmap(dev, bufmmio);
 	pci_release_region(dev, NEWDEV_BUF_PCI_BAR);
+	pci_disable_device(dev);
 	unregister_chrdev(major, DEV_NAME);
+
+	kfree(read_buffer);
+	read_buffer = NULL;
 }
 
 static struct pci_driver pci_driver = {

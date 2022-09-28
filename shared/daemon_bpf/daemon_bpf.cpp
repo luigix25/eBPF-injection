@@ -84,7 +84,7 @@ bpf_injection_msg_t recv_bpf_injection_msg(int fd){
 
 	while(payload_left > 0){	
         	
-		len = read(fd, addr, 4);
+		len = read(fd, addr, payload_left);
 		if (len < 0) {
 			perror("read: ");
 			return mymsg;
