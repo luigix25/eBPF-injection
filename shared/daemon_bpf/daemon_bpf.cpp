@@ -56,6 +56,7 @@ using namespace std;
 
 //TODO: spostare?
 #define MAX_CPU 64
+#define IOCTL_SCHED_SETAFFINITY 13
 
 // To return informations to the device and then to the host, just write to device
 // in order to trigger some action on the host side
@@ -97,7 +98,7 @@ bpf_injection_msg_t recv_bpf_injection_msg(int fd){
 	return mymsg;
 }
 
-int handleProgramInjection(bpf_injection_msg_t message){
+int handleProgramInjection(bpf_injection_msg_t message, int dev_fd){
 
     BpfLoader loader(message);
     int map_fd = loader.loadAndGetMap();
@@ -144,7 +145,7 @@ int handleProgramInjection(bpf_injection_msg_t message){
 
             #warning valore passato per riferimento ad ioctl
             #warning abilitare ioctl
-            //ioctl(fd, IOCTL_SCHED_SETAFFINITY, &value);
+            ioctl(dev_fd, IOCTL_SCHED_SETAFFINITY, &cpu_mask);
             cpu_mask = 0;
             bpf_map_update_elem(map_fd, &i, &cpu_mask, BPF_ANY);
         }
@@ -193,7 +194,7 @@ int main(){
 
         switch (message.header.type){
             case PROGRAM_INJECTION:
-                if(handleProgramInjection(message) < 0){
+                if(handleProgramInjection(message,fd) < 0){
                     cerr<<"Generic Error"<<endl;
                     return -1;
                 }
