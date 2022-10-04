@@ -37,11 +37,25 @@
 
 // Using BPF_MAP_TYPE_ARRAY map type all array elements pre-allocated 
 // and zero initialized at init time
+#define PIN 0
+#define UNPIN 1
+
+typedef struct {
+	u64 cpu_set;
+	u64 op;
+} cpu_set_op_t;
+
+struct bpf_map_def SEC("maps") values_index = {
+	.type = BPF_MAP_TYPE_ARRAY,
+	.key_size = sizeof(u32),
+	.value_size = sizeof(u32),
+	.max_entries = 1,
+};
 
 struct bpf_map_def SEC("maps") values = {
 	.type = BPF_MAP_TYPE_ARRAY,
 	.key_size = sizeof(u32),
-	.value_size = sizeof(u64),
+	.value_size = sizeof(cpu_set_op_t),
 	.max_entries = MAX_ENTRIES,
 };
 
@@ -68,36 +82,56 @@ struct bpf_map_def SEC("maps") pids = {
  * Number of arguments and their positions can change, etc.
  * In such case this bpf+kprobe example will no longer be meaningful
 */
+
+static s32 insert_value(cpu_set_op_t *value){
+
+	u32 *top;
+	u32 index = 0;
+
+	top = bpf_map_lookup_elem(&values_index, &index);	
+	if (!top){ //entry not found! should never reach here!
+		return -1;
+	}
+
+	if(*top == MAX_ENTRIES){ //map is full
+		return -1;
+	}
+
+	__sync_fetch_and_add(top, 1);
+	index = *top;
+
+	return !bpf_map_update_elem(&values, &index, value, BPF_ANY);
+
+}
+
 SEC("kprobe/sched_setaffinity")
 int bpf_prog1(struct pt_regs *ctx){
-	int ret;
 	u32 pid;
 	u64 cpu_set;
-	u64 *top;
-	u32 index = 0;
-	
+
 	//If pid == 0, means current process
 	pid = (pid_t)PT_REGS_PARM1(ctx);
 	if(pid == 0){
 		pid = bpf_get_current_pid_tgid() >> 32;
 	}
 
-	// Read from onst struct cpumask *new_mask (2nd parameter)
-	ret = bpf_probe_read(&cpu_set, 8, (void*)PT_REGS_PARM2(ctx));
-
-	top = bpf_map_lookup_elem(&values, &index);	
-	if (!top){ //entry not found!		
-		return 0;
+	// Read from struct cpumask *new_mask (2nd parameter)
+	if(bpf_probe_read(&cpu_set, 8, (void*)PT_REGS_PARM2(ctx))){
+		bpf_printk("Error reading cpu_mask from ctx\n");
+		return -1;
 	}
-	if(*top == MAX_ENTRIES-1){ //map is full
-		return 0;
-	}
-	__sync_fetch_and_add(top, 1);
-	index = *top;
-	bpf_map_update_elem(&values, &index, &cpu_set, BPF_ANY);
 
-	u32 value = 1;
-	bpf_map_update_elem(&pids, &pid, &value, BPF_ANY);	
+	cpu_set_op_t value;
+	value.op = PIN;
+	value.cpu_set = cpu_set;
+
+	if(!insert_value(&value)){
+		bpf_printk("Error in insert value\n");
+		return -1;
+	}
+
+	//Registering PID for tracking in exit
+	bpf_map_update_elem(&pids, &pid, &cpu_set, BPF_ANY);	
 	bpf_printk("Pinned: PID %d\n",pid);
 
     return 0;    
@@ -106,18 +140,25 @@ int bpf_prog1(struct pt_regs *ctx){
 
 SEC("kprobe/do_exit")
 int probe_do_exit(struct pt_regs *ctx){
-	u32 pid = bpf_get_current_pid_tgid() >> 32;
-	u32 *elem;
 
-	elem = (u32*)bpf_map_lookup_elem(&pids,&pid);
+	u32 pid = bpf_get_current_pid_tgid() >> 32;
+	u64 *elem;
+
+	elem = bpf_map_lookup_elem(&pids,&pid);
 	if(!elem){
 		return 0;
 	} 
 
+	cpu_set_op_t value;
+	value.op = UNPIN;
+	value.cpu_set = *elem;
+
+	if(!insert_value(&value))
+		return -1;
+
 	bpf_printk("DO exit: PID %d\n",pid);
 	bpf_map_delete_elem(&pids,&pid);
-	
-	
+		
 	return 0;
 }
 
