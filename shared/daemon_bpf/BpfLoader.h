@@ -16,7 +16,9 @@ class BpfLoader
 
     public:
         BpfLoader(bpf_injection_msg_t message);
-        /* Loads the BPF Program inside the kernel and returns the BPF Map FD*/
-        int loadAndGetMap();
+        /* Loads the BPF Program inside the kernel */
+        int load();
+        /* Returns fd for a map */
+        int getMap(const char *);
         ~BpfLoader();
 };

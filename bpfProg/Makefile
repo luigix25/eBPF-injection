@@ -1,6 +1,6 @@
 PATH_LIB_INCLUDE=/lib/modules/$(shell uname -r)
 PATH_USR_INCLUDE=/usr/include/$(shell uname -m)-linux-gnu
-LINUXINCLUDE := -I${PATH_LIB_INCLUDE}/build/include -I ${PATH_USR_INCLUDE}
+LINUXINCLUDE := -I${PATH_LIB_INCLUDE}/build/include -I ${PATH_USR_INCLUDE} -I ../include
 BUILD_DIR=build
 CC=clang
 CFLAGS= -O2 -Wall #-Wextra -pedantic 

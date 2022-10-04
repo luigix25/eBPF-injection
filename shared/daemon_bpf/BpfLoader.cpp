@@ -20,7 +20,7 @@ BpfLoader::BpfLoader(bpf_injection_msg_t message){
 
 }
 
-int BpfLoader::loadAndGetMap(){
+int BpfLoader::load(){
 
     /* load BPF program */
     if (bpf_object__load(this->obj)) {
@@ -30,7 +30,7 @@ int BpfLoader::loadAndGetMap(){
 
     int err;
 
-    //Useless: Just One Program
+    //Loading all available progs
     bpf_object__for_each_program(prog, obj) {
         links = bpf_program__attach(prog);
         err = libbpf_get_error(links);
@@ -42,6 +42,10 @@ int BpfLoader::loadAndGetMap(){
     }
 
     cout<<"Bpf program successfully loaded."<<endl;
+    return 0;
+}
+
+int BpfLoader::getMap(const char *name){
 
     bpf_map *map;
 
@@ -52,9 +56,9 @@ int BpfLoader::loadAndGetMap(){
         cout<<"[LOG] map: "<<name<<endl;
     }
 
-    int map_fd = bpf_object__find_map_fd_by_name(obj,"values");
+    int map_fd = bpf_object__find_map_fd_by_name(obj,name);
     if(map_fd < 0){
-        cerr<<"Error map 'values' not found"<<endl;
+        cerr<<"Error map "<<name<<" not found"<<endl;
         return -1;
     }
 

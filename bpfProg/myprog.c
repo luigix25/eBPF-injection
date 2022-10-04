@@ -30,20 +30,14 @@
 #include <bpf/bpf_helpers.h>
 #include <bpf/bpf_tracing.h>
 
+#define EBPF_PROG //Used for sharing include between C++ and eBPF
+#include <bpf_agent_util.h>
 
 #define _(P) ({typeof(P) val = 0; bpf_probe_read(&val, sizeof(val), &P); val;})
-#define MAX_ENTRIES 64
 
 
 // Using BPF_MAP_TYPE_ARRAY map type all array elements pre-allocated 
 // and zero initialized at init time
-#define PIN 0
-#define UNPIN 1
-
-typedef struct {
-	u64 cpu_set;
-	u64 op;
-} cpu_set_op_t;
 
 struct bpf_map_def SEC("maps") values_index = {
 	.type = BPF_MAP_TYPE_ARRAY,

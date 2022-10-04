@@ -43,6 +43,7 @@
 using namespace std;
 
 #include <bpf_injection_msg.h>
+#include <bpf_agent_util.h>
 #include "BpfLoader.h"
 
 #define DEBUG
@@ -54,8 +55,6 @@ using namespace std;
 #endif
 
 
-//TODO: spostare?
-#define MAX_CPU 64
 #define IOCTL_SCHED_SETAFFINITY 13
 
 // To return informations to the device and then to the host, just write to device
@@ -101,8 +100,16 @@ bpf_injection_msg_t recv_bpf_injection_msg(int fd){
 int handleProgramInjection(bpf_injection_msg_t message, int dev_fd){
 
     BpfLoader loader(message);
-    int map_fd = loader.loadAndGetMap();
-    if(map_fd < 0){
+    if(!loader.load())
+        return -1;
+    
+    int map_values_fd = loader.getMap("values");
+    if(map_values_fd < 0){
+        return -1;
+    }
+
+    int values_index_fd = loader.getMap("values_index");
+    if(values_index_fd < 0){
         return -1;
     }
 
@@ -117,24 +124,24 @@ int handleProgramInjection(bpf_injection_msg_t message, int dev_fd){
         
         uint32_t index = 0;
         uint64_t n_modified; //each row is 64 bits
-        bpf_map_lookup_elem(map_fd,&index,&n_modified); //first elem is the pos. of first free slot
+        bpf_map_lookup_elem(values_index_fd, &index, &n_modified); //first elem is the pos. of first free slot
 
         if(n_modified == 0)
             continue; //no changes in BPF map
 
         cout<<"BPF Map Modified: number of changes "<<n_modified<<endl;
 
-        for (uint32_t i=1; i <= n_modified && i < MAX_CPU; i++){
+        for (uint32_t i=1; i <= n_modified && i < MAX_ENTRIES; i++){
 
-            uint64_t cpu_mask;
-            bpf_map_lookup_elem(map_fd,&i,&cpu_mask);
+            cpu_set_op_t cpu_set_obj;
+            bpf_map_lookup_elem(map_values_fd,&i,&cpu_set_obj);
             
             DBG(
 
-                bitset<64> cpu_bitmask(cpu_mask);
+                bitset<64> cpu_bitmask(cpu_set_obj.cpu_set);
                 cout<<cpu_bitmask<<endl;
 
-                if(__builtin_popcountll(cpu_mask) > 1)
+                if(__builtin_popcountll(cpu_set_obj.cpu_set) > 1)
                     cout<<"Pinning to more than 1 CPU"<<endl;
                 else
                     cout<<"Pinning to one CPU"<<endl;
@@ -147,12 +154,12 @@ int handleProgramInjection(bpf_injection_msg_t message, int dev_fd){
             #warning abilitare ioctl
             ioctl(dev_fd, IOCTL_SCHED_SETAFFINITY, &cpu_mask);
             cpu_mask = 0;
-            bpf_map_update_elem(map_fd, &i, &cpu_mask, BPF_ANY);
+            bpf_map_update_elem(map_values_fd, &i, &cpu_mask, BPF_ANY);
         }
 
         //resetting first slot
         n_modified = 0;
-        bpf_map_update_elem(map_fd, &index, &n_modified, BPF_ANY);
+        bpf_map_update_elem(values_index_fd, &index, &n_modified, BPF_ANY);
 
     }
 }
