@@ -45,6 +45,13 @@ struct bpf_map_def SEC("maps") values = {
 	.max_entries = MAX_ENTRIES,
 };
 
+struct bpf_map_def SEC("maps") pids = {
+	.type = BPF_MAP_TYPE_HASH,
+	.key_size = sizeof(u32),
+	.value_size = sizeof(u64),
+	.max_entries = MAX_ENTRIES,
+};
+
 /*	System call prototype:	
 		asmlinkage long sys_sched_setaffinity(pid_t pid, unsigned int len,
 					unsigned long __user *user_mask_ptr);
@@ -64,17 +71,18 @@ struct bpf_map_def SEC("maps") values = {
 SEC("kprobe/sched_setaffinity")
 int bpf_prog1(struct pt_regs *ctx){
 	int ret;
-	// int pid;
+	u32 pid;
 	u64 cpu_set;
 	u64 *top;
 	u32 index = 0;
-
-	// char fmt[] = "cpu_set %lu\n";
-	// bpf_trace_printk(fmt, sizeof(fmt), cpu_set);
+	
+	//If pid == 0, means current process
+	pid = (pid_t)PT_REGS_PARM1(ctx);
+	if(pid == 0){
+		pid = bpf_get_current_pid_tgid() >> 32;
+	}
 
 	// Read from onst struct cpumask *new_mask (2nd parameter)
-	
-	// pid = (int)PT_REGS_PARM1(ctx);
 	ret = bpf_probe_read(&cpu_set, 8, (void*)PT_REGS_PARM2(ctx));
 
 	top = bpf_map_lookup_elem(&values, &index);	
@@ -86,10 +94,33 @@ int bpf_prog1(struct pt_regs *ctx){
 	}
 	__sync_fetch_and_add(top, 1);
 	index = *top;
-	// bpf_trace_printk(fmt, sizeof(fmt), cpu_set);
-	bpf_map_update_elem(&values, &index, &cpu_set, 0);
+	bpf_map_update_elem(&values, &index, &cpu_set, BPF_ANY);
+
+	u32 value = 1;
+	bpf_map_update_elem(&pids, &pid, &value, BPF_ANY);	
+	bpf_printk("Pinned: PID %d\n",pid);
+
     return 0;    
 }
+
+
+SEC("kprobe/do_exit")
+int probe_do_exit(struct pt_regs *ctx){
+	u32 pid = bpf_get_current_pid_tgid() >> 32;
+	u32 *elem;
+
+	elem = (u32*)bpf_map_lookup_elem(&pids,&pid);
+	if(!elem){
+		return 0;
+	} 
+
+	bpf_printk("DO exit: PID %d\n",pid);
+	bpf_map_delete_elem(&pids,&pid);
+	
+	
+	return 0;
+}
+
 
 char _license[] SEC("license") = "GPL";
 u32 _version SEC("version") = LINUX_VERSION_CODE;		
