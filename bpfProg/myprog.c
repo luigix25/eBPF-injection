@@ -1,6 +1,6 @@
 /*
  * BPF program to monitor CPU affinity tuning
- * 2020 Giacomo Pellicci
+ * 2020 - 2022 Luigi Leonardi and Giacomo Pellicci
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -56,6 +56,11 @@ typedef struct{
 	u64 operation;	//0 pin 1 unpin
 } cpu_mask_t;
 
+typedef struct {
+	u64 size;
+	cpu_mask_t cpu_mask_obj;
+} container_t;
+
 /*	System call prototype:	
 		asmlinkage long sys_sched_setaffinity(pid_t pid, unsigned int len,
 					unsigned long __user *user_mask_ptr);
@@ -75,17 +80,18 @@ typedef struct{
 
 int send_to_ringbuff(u64 cpu_set, u64 operation){
 
-	cpu_mask_t *cpu_mask_obj;
-	cpu_mask_obj = bpf_ringbuf_reserve(&bpf_ringbuffer,sizeof(cpu_mask_t),0);
-	if(!cpu_mask_obj){
+	container_t *container_obj;
+	container_obj = bpf_ringbuf_reserve(&bpf_ringbuffer,sizeof(container_t),0);
+	if(!container_obj){
 		bpf_printk("Error while reserving space on ringbuf\n");
 		return -1;
 	}
 
-	cpu_mask_obj->cpu_mask = cpu_set;
-	cpu_mask_obj->operation = operation;
+	container_obj->size = sizeof(cpu_mask_t);
+	container_obj->cpu_mask_obj.cpu_mask = cpu_set;
+	container_obj->cpu_mask_obj.operation = operation;
 
-	bpf_ringbuf_submit(cpu_mask_obj,BPF_RB_FORCE_WAKEUP);
+	bpf_ringbuf_submit(container_obj,0);
 
 	return 0;
 
@@ -106,8 +112,14 @@ int bpf_prog1(struct pt_regs *ctx){
 	if(bpf_probe_read(&cpu_set, 8, (void*)PT_REGS_PARM2(ctx)))
 		return 0;
 
+	u64 operation = PIN;
 
-	if(send_to_ringbuff(cpu_set,PIN)){
+	if(cpu_set == (u64)-1){ //unpinning
+		bpf_map_delete_elem(&pids,&pid);
+		operation = UNPIN;
+	}
+
+	if(send_to_ringbuff(cpu_set,operation)){
 		bpf_printk("Error while sending on the ringbuff\n");
 		return -1;
 	}
