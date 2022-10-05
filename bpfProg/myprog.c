@@ -32,16 +32,15 @@
 
 
 #define _(P) ({typeof(P) val = 0; bpf_probe_read(&val, sizeof(val), &P); val;})
-#define MAX_ENTRIES 64
-
+#define MAX_ENTRIES 4096	//must be a power of two
+#define PIN 0
+#define UNPIN 1
 
 // Using BPF_MAP_TYPE_ARRAY map type all array elements pre-allocated 
 // and zero initialized at init time
 
-struct bpf_map_def SEC("maps") values = {
-	.type = BPF_MAP_TYPE_ARRAY,
-	.key_size = sizeof(u32),
-	.value_size = sizeof(u64),
+struct bpf_map_def SEC("maps") bpf_ringbuffer = {
+	.type = BPF_MAP_TYPE_RINGBUF,
 	.max_entries = MAX_ENTRIES,
 };
 
@@ -51,6 +50,11 @@ struct bpf_map_def SEC("maps") pids = {
 	.value_size = sizeof(u64),
 	.max_entries = MAX_ENTRIES,
 };
+
+typedef struct{
+	u64 cpu_mask;
+	u64 operation;	//0 pin 1 unpin
+} cpu_mask_t;
 
 /*	System call prototype:	
 		asmlinkage long sys_sched_setaffinity(pid_t pid, unsigned int len,
@@ -70,11 +74,8 @@ struct bpf_map_def SEC("maps") pids = {
 */
 SEC("kprobe/sched_setaffinity")
 int bpf_prog1(struct pt_regs *ctx){
-	int ret;
 	u32 pid;
 	u64 cpu_set;
-	u64 *top;
-	u32 index = 0;
 	
 	//If pid == 0, means current process
 	pid = (pid_t)PT_REGS_PARM1(ctx);
@@ -83,24 +84,24 @@ int bpf_prog1(struct pt_regs *ctx){
 	}
 
 	// Read from onst struct cpumask *new_mask (2nd parameter)
-	ret = bpf_probe_read(&cpu_set, 8, (void*)PT_REGS_PARM2(ctx));
-
-	top = bpf_map_lookup_elem(&values, &index);	
-	if (!top){ //entry not found!		
+	if(!bpf_probe_read(&cpu_set, 8, (void*)PT_REGS_PARM2(ctx)))
 		return 0;
-	}
-	if(*top == MAX_ENTRIES-1){ //map is full
-		return 0;
-	}
-	__sync_fetch_and_add(top, 1);
-	index = *top;
-	bpf_map_update_elem(&values, &index, &cpu_set, BPF_ANY);
 
-	u32 value = 1;
-	bpf_map_update_elem(&pids, &pid, &value, BPF_ANY);	
+	cpu_mask_t *cpu_mask_obj;
+	cpu_mask_obj = bpf_ringbuf_reserve(&bpf_ringbuffer,sizeof(cpu_mask_t),0);
+	if(!cpu_mask_obj)
+		return -1;
+
+	cpu_mask_obj->cpu_mask = cpu_set;
+	cpu_mask_obj->operation = PIN;
+
+	bpf_ringbuf_submit(&cpu_mask_obj,BPF_RB_NO_WAKEUP);
+
+	u32 one = 1;
+	bpf_map_update_elem(&pids, &pid, &one, BPF_ANY);	
 	bpf_printk("Pinned: PID %d\n",pid);
 
-    return 0;    
+    return 0;
 }
 
 
