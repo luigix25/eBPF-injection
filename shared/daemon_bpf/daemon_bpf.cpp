@@ -98,6 +98,24 @@ bpf_injection_msg_t recv_bpf_injection_msg(int fd){
 	return mymsg;
 }
 
+int funzione(void *ctx, void *data, size_t){
+
+    uint64_t *ptr = static_cast<uint64_t*>(data);
+
+    uint64_t value = *(ptr+1);
+
+    if(value)
+        cout<<"UNPIN"<<endl;
+    else
+        cout<<"PIN"<<endl;
+
+    cout<<"cpu_mask "<<*ptr<<endl;
+
+
+    return 0;
+
+}
+
 int handleProgramInjection(bpf_injection_msg_t message, int dev_fd){
 
     BpfLoader loader(message);
@@ -106,6 +124,7 @@ int handleProgramInjection(bpf_injection_msg_t message, int dev_fd){
         return -1;
     }
 
+    ring_buffer *buffer_bpf = ring_buffer__new(map_fd,funzione,NULL,NULL);
     cout<<"[LOG] Starting operations"<<endl;
 
     timespec time_period;
@@ -113,8 +132,9 @@ int handleProgramInjection(bpf_injection_msg_t message, int dev_fd){
     time_period.tv_nsec = 50000000L;    //50ms
 
     while(true){
-        nanosleep(&time_period, NULL);  //sleeping
-        
+        //nanosleep(&time_period, NULL);  //sleeping
+        ring_buffer__poll(buffer_bpf,50);   //50 ms sleep
+        continue;
         uint32_t index = 0;
         uint64_t n_modified; //each row is 64 bits
         bpf_map_lookup_elem(map_fd,&index,&n_modified); //first elem is the pos. of first free slot

@@ -52,9 +52,9 @@ int BpfLoader::loadAndGetMap(){
         cout<<"[LOG] map: "<<name<<endl;
     }
 
-    int map_fd = bpf_object__find_map_fd_by_name(obj,"values");
+    int map_fd = bpf_object__find_map_fd_by_name(obj,"bpf_ringbuffer");
     if(map_fd < 0){
-        cerr<<"Error map 'values' not found"<<endl;
+        cerr<<"Error map 'bpf_ringbuffer' not found"<<endl;
         return -1;
     }
 

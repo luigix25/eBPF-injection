@@ -47,7 +47,7 @@ struct bpf_map_def SEC("maps") bpf_ringbuffer = {
 struct bpf_map_def SEC("maps") pids = {
 	.type = BPF_MAP_TYPE_HASH,
 	.key_size = sizeof(u32),
-	.value_size = sizeof(u64),
+	.value_size = sizeof(u32),
 	.max_entries = MAX_ENTRIES,
 };
 
@@ -72,6 +72,25 @@ typedef struct{
  * Number of arguments and their positions can change, etc.
  * In such case this bpf+kprobe example will no longer be meaningful
 */
+
+int send_to_ringbuff(u64 cpu_set, u64 operation){
+
+	cpu_mask_t *cpu_mask_obj;
+	cpu_mask_obj = bpf_ringbuf_reserve(&bpf_ringbuffer,sizeof(cpu_mask_t),0);
+	if(!cpu_mask_obj){
+		bpf_printk("Error while reserving space on ringbuf\n");
+		return -1;
+	}
+
+	cpu_mask_obj->cpu_mask = cpu_set;
+	cpu_mask_obj->operation = operation;
+
+	bpf_ringbuf_submit(cpu_mask_obj,BPF_RB_FORCE_WAKEUP);
+
+	return 0;
+
+}
+
 SEC("kprobe/sched_setaffinity")
 int bpf_prog1(struct pt_regs *ctx){
 	u32 pid;
@@ -84,21 +103,16 @@ int bpf_prog1(struct pt_regs *ctx){
 	}
 
 	// Read from onst struct cpumask *new_mask (2nd parameter)
-	if(!bpf_probe_read(&cpu_set, 8, (void*)PT_REGS_PARM2(ctx)))
+	if(bpf_probe_read(&cpu_set, 8, (void*)PT_REGS_PARM2(ctx)))
 		return 0;
 
-	cpu_mask_t *cpu_mask_obj;
-	cpu_mask_obj = bpf_ringbuf_reserve(&bpf_ringbuffer,sizeof(cpu_mask_t),0);
-	if(!cpu_mask_obj)
+
+	if(send_to_ringbuff(cpu_set,PIN)){
+		bpf_printk("Error while sending on the ringbuff\n");
 		return -1;
+	}
 
-	cpu_mask_obj->cpu_mask = cpu_set;
-	cpu_mask_obj->operation = PIN;
-
-	bpf_ringbuf_submit(&cpu_mask_obj,BPF_RB_NO_WAKEUP);
-
-	u32 one = 1;
-	bpf_map_update_elem(&pids, &pid, &one, BPF_ANY);	
+	bpf_map_update_elem(&pids, &pid, &cpu_set, BPF_ANY);	
 	bpf_printk("Pinned: PID %d\n",pid);
 
     return 0;
@@ -114,6 +128,11 @@ int probe_do_exit(struct pt_regs *ctx){
 	if(!elem){
 		return 0;
 	} 
+
+	if(send_to_ringbuff((u64)(*elem),UNPIN)){
+		bpf_printk("Error while sending on the ringbuff\n");
+		return -1;
+	}
 
 	bpf_printk("DO exit: PID %d\n",pid);
 	bpf_map_delete_elem(&pids,&pid);
