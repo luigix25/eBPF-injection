@@ -97,19 +97,32 @@ bpf_injection_msg_t recv_bpf_injection_msg(int fd){
 	return mymsg;
 }
 
-int funzione(void *ctx, void *data, size_t){
-
+int handler_ringbuf(void *ctx, void *data, size_t){
+    /* Each time a new element is available in the ringbuffer this function is called */
     uint64_t *ptr = static_cast<uint64_t*>(data);
 
-    uint64_t value = *(ptr+1);
+    uint64_t size = *ptr;
+    uint64_t value = *(ptr+2);
 
-    if(value)
-        cout<<"UNPIN"<<endl;
-    else
-        cout<<"PIN"<<endl;
+    /* DEBUG */
 
-    cout<<"cpu_mask "<<*ptr<<endl;
+    DBG(
+        cout<<"SIZE "<<size<<endl;
 
+        if(value)
+            cout<<"UNPIN"<<endl;
+        else
+            cout<<"PIN"<<endl;
+
+        cout<<"cpu_mask "<<*(ptr+1)<<endl;
+    );
+
+    //Ugly casts for retrieving fd from ctx
+    int dev_fd = reinterpret_cast<long>(ctx);
+
+    write(dev_fd,data,size+8);
+    int one = 1;
+    ioctl(dev_fd, IOCTL_PROGRAM_RESULT_READY, &one);
 
     return 0;
 
@@ -123,15 +136,10 @@ int handleProgramInjection(bpf_injection_msg_t message, int dev_fd){
         return -1;
     }
 
-    ring_buffer *buffer_bpf = ring_buffer__new(map_fd,funzione,(void*)(long)dev_fd,NULL);
+    ring_buffer *buffer_bpf = ring_buffer__new(map_fd,handler_ringbuf,(void*)(long)dev_fd,NULL);
     cout<<"[LOG] Starting operations"<<endl;
 
-    timespec time_period;
-    time_period.tv_sec = 0;
-    time_period.tv_nsec = 50000000L;    //50ms
-
     while(true){
-        //nanosleep(&time_period, NULL);  //sleeping
         ring_buffer__poll(buffer_bpf,50);   //50 ms sleep
         continue;
         uint32_t index = 0;
