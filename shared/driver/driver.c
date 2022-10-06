@@ -251,7 +251,7 @@ static int pci_probe(struct pci_dev *dev, const struct pci_device_id *id)
 		goto pci_enable_label;
 	}
 	bufmmio = pci_iomap(pdev, NEWDEV_BUF_PCI_BAR, pci_resource_len(pdev, NEWDEV_BUF_PCI_BAR));
-	bufmmio_user = bufmmio + 16; //skipping memory mapped registers
+	bufmmio_user = bufmmio + 32; //skipping memory mapped registers: 8 registers of 4 bytes
 
 	if(bufmmio == NULL){
 		dev_err(&(pdev->dev), "pci_iomap\n");
