@@ -20,6 +20,10 @@
 #define RESET								17
 #define PIN_ON_SAME							18
 #define HT_REMAPPING							19
+
+#define IOCTL_SCHED_SETAFFINITY 13
+#define IOCTL_PROGRAM_RESULT_READY 14
+
 /* version defines */
 #define DEFAULT_VERSION 					1
 

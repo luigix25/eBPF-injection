@@ -38,10 +38,7 @@
 #define NEWDEV_REG_DOORBELL		8
 #define NEWDEV_REG_SETAFFINITY	12
 
-#define IOCTL_SCHED_SETAFFINITY 13
-#define IOCTL_PROGRAM_INJECTION_RESULT_READY 14
-
-#define BUFFER_SIZE 65536 + 4
+#define BUFFER_SIZE 65536
 
 
 MODULE_LICENSE("GPL");
@@ -57,7 +54,9 @@ static int pci_irq;
 static int major;
 static struct pci_dev *pdev;
 static void __iomem *bufmmio;
-static void __iomem *bufmmio_user;
+static void __iomem *bufmmio_read_buffer;
+static void __iomem *bufmmio_write_buffer;
+
 static DECLARE_WAIT_QUEUE_HEAD(wq);		//wait queue static declaration
 
 static u8 *read_buffer;
@@ -103,30 +102,39 @@ static ssize_t write(struct file *filp, const char __user *buf, size_t len, loff
 	u32 kbuf;
 	pr_info("WRITE SIZE=%ld, OFF=%lld", len, *off);
 	ret = len;
-	if (!(*off % 4)) {
-		if (copy_from_user((void *)&kbuf, buf, 4) ) { // || len != 4) {
-			ret = -EFAULT;
-		} else {
-			iowrite32(kbuf, bufmmio_user + *off);			
-			*off += 4;
-		}
-	}
-	else{
+
+	if(len %4 != 0){
 		pr_info("write off=%lld or size=%ld error, NOT ALIGNED 4!\n", *off, len);
+		return 0;
 	}
+
+	while(len != 0){
+		if (copy_from_user((void *)&kbuf, buf, 4)){
+			ret = -EFAULT;
+			return ret;
+		}
+
+		iowrite32(kbuf, bufmmio_write_buffer + *off);
+		*off += 4;
+		len -= 4;
+		buf += 4;
+	}
+
+	*off = 0;
+
 	pr_info("WRITE\n");
 	return ret;
 }
 
-static long newdev_ioctl(struct file *file, unsigned int cmd, unsigned long arg) {   
+static long newdev_ioctl(struct file *file, unsigned int cmd, unsigned long arg) {
     switch (cmd) {
-        case IOCTL_PROGRAM_INJECTION_RESULT_READY:
+        case IOCTL_PROGRAM_RESULT_READY:
         	//bpf program result inserted in buffer area as bpf_injection_msg_t
         	pr_info("response is ready!!! [dev]\n");
         	iowrite32(1, bufmmio + NEWDEV_REG_DOORBELL);
         	//signal to device 
         	break;
-        case IOCTL_SCHED_SETAFFINITY:
+        case IOCTL_SCHED_SETAFFINITY:	// Deprecated
         {
         	// Retrieve the requested cpu from userspace
         	// Write in specific region in device to trigger the sched_setaffinity in host system
@@ -137,7 +145,7 @@ static long newdev_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
           	pr_info("IOCTL requested_cpu: %d\n", requested_cpu);
           	iowrite32(requested_cpu, bufmmio + NEWDEV_REG_SETAFFINITY);
         	break;
-        }        	
+        }
 	}
 	return 0;
 }
@@ -192,7 +200,7 @@ static irqreturn_t bottom_half_handler(int irq, void *dev_id){
 	u32 offset;
 	struct bpf_injection_msg_header myheader;
 
-	data = ioread32(bufmmio_user);
+	data = ioread32(bufmmio_read_buffer);
 
 	memcpy(&myheader, &data, sizeof(data));
 	pr_info("  Version:%u\n  Type:%u\n  Payload_len:%u\n", myheader.version, myheader.type, myheader.payload_len);
@@ -201,7 +209,7 @@ static irqreturn_t bottom_half_handler(int irq, void *dev_id){
 	offset = 0;
 
 	while(payload_left){
-		data = ioread32(bufmmio_user + offset);
+		data = ioread32(bufmmio_read_buffer + offset);
 		memcpy(read_buffer + offset, &data,sizeof(data));
 
 		if(payload_left < 4){
@@ -251,7 +259,12 @@ static int pci_probe(struct pci_dev *dev, const struct pci_device_id *id)
 		goto pci_enable_label;
 	}
 	bufmmio = pci_iomap(pdev, NEWDEV_BUF_PCI_BAR, pci_resource_len(pdev, NEWDEV_BUF_PCI_BAR));
-	bufmmio_user = bufmmio + 32; //skipping memory mapped registers: 8 registers of 4 bytes
+	bufmmio_read_buffer  = bufmmio + 32; 					//skipping memory mapped registers: 8 registers of 4 bytes
+	bufmmio_write_buffer = bufmmio_read_buffer + 0x40000; 	//skipping read_buffer: 64K lines of 4 bytes
+
+	pr_info("    _buf  %px\n",bufmmio);
+	pr_info("read_buf  %px\n",bufmmio_read_buffer);
+	pr_info("write_buf %px\n",bufmmio_write_buffer);
 
 	if(bufmmio == NULL){
 		dev_err(&(pdev->dev), "pci_iomap\n");

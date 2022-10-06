@@ -56,7 +56,6 @@ using namespace std;
 
 //TODO: spostare?
 #define MAX_CPU 64
-#define IOCTL_SCHED_SETAFFINITY 13
 
 // To return informations to the device and then to the host, just write to device
 // in order to trigger some action on the host side
@@ -124,7 +123,7 @@ int handleProgramInjection(bpf_injection_msg_t message, int dev_fd){
         return -1;
     }
 
-    ring_buffer *buffer_bpf = ring_buffer__new(map_fd,funzione,NULL,NULL);
+    ring_buffer *buffer_bpf = ring_buffer__new(map_fd,funzione,(void*)(long)dev_fd,NULL);
     cout<<"[LOG] Starting operations"<<endl;
 
     timespec time_period;
@@ -165,7 +164,7 @@ int handleProgramInjection(bpf_injection_msg_t message, int dev_fd){
 
             #warning valore passato per riferimento ad ioctl
             #warning abilitare ioctl
-            ioctl(dev_fd, IOCTL_SCHED_SETAFFINITY, &cpu_mask);
+            ioctl(dev_fd, IOCTL_PROGRAM_RESULT_READY, &cpu_mask);
             cpu_mask = 0;
             bpf_map_update_elem(map_fd, &i, &cpu_mask, BPF_ANY);
         }
