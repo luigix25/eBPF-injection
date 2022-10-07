@@ -142,45 +142,6 @@ int handleProgramInjection(bpf_injection_msg_t message, int dev_fd){
     while(true){
         ring_buffer__poll(buffer_bpf,50);   //50 ms sleep
         continue;
-        uint32_t index = 0;
-        uint64_t n_modified; //each row is 64 bits
-        bpf_map_lookup_elem(map_fd,&index,&n_modified); //first elem is the pos. of first free slot
-
-        if(n_modified == 0)
-            continue; //no changes in BPF map
-
-        cout<<"BPF Map Modified: number of changes "<<n_modified<<endl;
-
-        for (uint32_t i=1; i <= n_modified && i < MAX_CPU; i++){
-
-            uint64_t cpu_mask;
-            bpf_map_lookup_elem(map_fd,&i,&cpu_mask);
-            
-            DBG(
-
-                bitset<64> cpu_bitmask(cpu_mask);
-                cout<<cpu_bitmask<<endl;
-
-                if(__builtin_popcountll(cpu_mask) > 1)
-                    cout<<"Pinning to more than 1 CPU"<<endl;
-                else
-                    cout<<"Pinning to one CPU"<<endl;
-                
-                cout<<"------------"<<endl;
-
-            );
-
-            #warning valore passato per riferimento ad ioctl
-            #warning abilitare ioctl
-            ioctl(dev_fd, IOCTL_PROGRAM_RESULT_READY, &cpu_mask);
-            cpu_mask = 0;
-            bpf_map_update_elem(map_fd, &i, &cpu_mask, BPF_ANY);
-        }
-
-        //resetting first slot
-        n_modified = 0;
-        bpf_map_update_elem(map_fd, &index, &n_modified, BPF_ANY);
-
     }
 }
 

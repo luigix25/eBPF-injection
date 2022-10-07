@@ -30,6 +30,7 @@
 #include <bpf/bpf_helpers.h>
 #include <bpf/bpf_tracing.h>
 
+#define VCPU_PINNING_TYPE 1
 
 #define _(P) ({typeof(P) val = 0; bpf_probe_read(&val, sizeof(val), &P); val;})
 #define MAX_ENTRIES 4096	//must be a power of two
@@ -57,6 +58,7 @@ typedef struct{
 } cpu_mask_t;
 
 typedef struct {
+	u64 type;
 	u64 size;
 	cpu_mask_t cpu_mask_obj;
 } container_t;
@@ -87,6 +89,7 @@ int send_to_ringbuff(u64 cpu_set, u64 operation){
 		return -1;
 	}
 
+	container_obj->type = VCPU_PINNING_TYPE;
 	container_obj->size = sizeof(cpu_mask_t);
 	container_obj->cpu_mask_obj.cpu_mask = cpu_set;
 	container_obj->cpu_mask_obj.operation = operation;
