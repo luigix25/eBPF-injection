@@ -49,7 +49,7 @@ static struct pci_device_id pci_ids[] = {
 };
 MODULE_DEVICE_TABLE(pci, pci_ids);
 
-static int flag;
+static int flag_read, flag_write;
 static int pci_irq;
 static int major;
 static struct pci_dev *pdev;
@@ -62,12 +62,11 @@ static DECLARE_WAIT_QUEUE_HEAD(wq);		//wait queue static declaration
 static u8 *read_buffer;
 static u16 available_data;				//data in the buffer
 
-static ssize_t read(struct file *filp, char __user *buf, size_t len, loff_t *off)
-{
+static ssize_t read(struct file *filp, char __user *buf, size_t len, loff_t *off){
 	ssize_t ret = 0;
 
 	// pr_info("READ SIZE=%ld, OFF=%lld", len, *off);
-	wait_event_interruptible(wq, flag >= 1);
+	wait_event_interruptible(wq, flag_read >= 1);
 	
 	//Fast Exit: unaligned read or reading 0 bytes
 	if (*off % 4 || len == 0){
@@ -90,16 +89,19 @@ static ssize_t read(struct file *filp, char __user *buf, size_t len, loff_t *off
 	pr_info("Available data %d\n",available_data);
 
 	if(available_data == 0){
-		flag = 0;
+		flag_read = 0;
 		*off = 0;
 	}
 	return ret;
 }
 
-static ssize_t write(struct file *filp, const char __user *buf, size_t len, loff_t *off)
-{
-	ssize_t ret;
+static ssize_t write(struct file *filp, const char __user *buf, size_t len, loff_t *off){
+	
+    ssize_t ret;
 	u32 kbuf;
+
+    wait_event_interruptible(wq, flag_write >= 1);
+
 	pr_info("WRITE SIZE=%ld, OFF=%lld", len, *off);
 	ret = len;
 
@@ -122,11 +124,13 @@ static ssize_t write(struct file *filp, const char __user *buf, size_t len, loff
 
 	*off = 0;
 
+    flag_write = 0; //blocking new writes until ACK via IRQ arrives
+
 	pr_info("WRITE\n");
 	return ret;
 }
 
-static long newdev_ioctl(struct file *file, unsigned int cmd, unsigned long arg) {
+static long newdev_ioctl(struct file *file, unsigned int cmd, unsigned long arg){
     switch (cmd) {
         case IOCTL_PROGRAM_RESULT_READY:
         	//bpf program result inserted in buffer area as bpf_injection_msg_t
@@ -164,6 +168,7 @@ static struct file_operations fops = {
 static irqreturn_t irq_handler(int irq, void *dev){
 	int devi;
 	u32 irq_status;
+    irqreturn_t return_value;
 
 	devi = *(int *)dev;
 	if(devi != major){
@@ -177,19 +182,25 @@ static irqreturn_t irq_handler(int irq, void *dev){
 			irq, devi, (unsigned long long)irq_status);
 
 	switch(irq_status){
-		case PROGRAM_INJECTION:
+		case PROGRAM_INJECTION: //New data is ready to be read
 			pr_info("case PROGRAM_INJECTION irq handler\n");
 			pr_info("waking up interruptible process...\n");
-
+            return_value = IRQ_WAKE_THREAD;
 			break;
 		case PROGRAM_INJECTION_AFFINITY:
 			pr_info("case PROGRAM_INJECTION_AFFINITY irq handler\n");
+            return_value = IRQ_WAKE_THREAD;
 			break;
+        case PROGRAM_INJECTION_RESULT: //Results Handled
+            return_value = IRQ_HANDLED;
+            wake_up_interruptible(&wq); //Waking up blocked write
+            flag_write = 1;
+            break;
 	}
 
 	/* Must do this ACK, or else the interrupts just keeps firing. */
 	iowrite32(irq_status, bufmmio + NEWDEV_REG_LOWER_IRQ);
-	return IRQ_WAKE_THREAD;
+	return return_value;
 }
 
 //Bottom Half
@@ -223,7 +234,7 @@ static irqreturn_t bottom_half_handler(int irq, void *dev_id){
 	available_data = myheader.payload_len +4;	//header followed by the payload
 
 	pr_info("waking up interruptible process...\n");
-	flag = 2;
+	flag_read = 2;
 	wake_up_interruptible(&wq);
 
 	return IRQ_HANDLED;
@@ -262,10 +273,6 @@ static int pci_probe(struct pci_dev *dev, const struct pci_device_id *id)
 	bufmmio_read_buffer  = bufmmio + 32; 					//skipping memory mapped registers: 8 registers of 4 bytes
 	bufmmio_write_buffer = bufmmio_read_buffer + 0x40000; 	//skipping read_buffer: 64K lines of 4 bytes
 
-	pr_info("    _buf  %px\n",bufmmio);
-	pr_info("read_buf  %px\n",bufmmio_read_buffer);
-	pr_info("write_buf %px\n",bufmmio_write_buffer);
-
 	if(bufmmio == NULL){
 		dev_err(&(pdev->dev), "pci_iomap\n");
 		goto pci_request_region_label;
@@ -279,7 +286,8 @@ static int pci_probe(struct pci_dev *dev, const struct pci_device_id *id)
 		goto pci_iomap_label;
 	}
 
-	flag = 0;
+	flag_read = 0;  //can't read
+    flag_write = 1; //can write
 
 	read_buffer = kmalloc(BUFFER_SIZE,GFP_KERNEL);
 	if(read_buffer == NULL){
