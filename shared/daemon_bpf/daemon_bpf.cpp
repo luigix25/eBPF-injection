@@ -99,28 +99,25 @@ bpf_injection_msg_t recv_bpf_injection_msg(int fd){
 
 int handler_ringbuf(void *ctx, void *data, size_t){
     /* Each time a new element is available in the ringbuffer this function is called */
-    uint64_t *ptr = static_cast<uint64_t*>(data);
-
-    uint64_t size = *ptr;
-    uint64_t value = *(ptr+2);
+    bpf_event_t *event = static_cast<bpf_event_t*>(data);
 
     /* DEBUG */
 
+    uint64_t *ptr = (uint64_t*)&event->payload;
     DBG(
-        cout<<"SIZE "<<size<<endl;
+        cout<<"SIZE "<<event->size<<endl;
 
-        if(value)
+        if(*(ptr+1))
             cout<<"UNPIN"<<endl;
         else
             cout<<"PIN"<<endl;
 
-        cout<<"cpu_mask "<<*(ptr+1)<<endl;
+        cout<<"cpu_mask "<<*(ptr)<<endl;
     );
 
-    //Ugly casts for retrieving fd from ctx
     int dev_fd = reinterpret_cast<long>(ctx);
 
-    write(dev_fd,data,size+8);
+    write(dev_fd,data,event->size + 2*sizeof(uint64_t)); //Type and Payload
     int one = 1;
     ioctl(dev_fd, IOCTL_PROGRAM_RESULT_READY, &one);
 

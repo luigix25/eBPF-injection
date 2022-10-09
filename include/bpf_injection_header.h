@@ -49,3 +49,9 @@ struct bpf_injection_msg_t {
 	struct bpf_injection_msg_header header;
 	void* payload;
 };
+
+struct bpf_event_t {
+	uint64_t type;
+	uint64_t size;
+	void *payload;
+};
