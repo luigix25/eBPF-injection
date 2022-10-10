@@ -53,10 +53,6 @@ using namespace std;
     #define DBG(x)
 #endif
 
-
-//TODO: spostare?
-#define MAX_CPU 64
-
 // To return informations to the device and then to the host, just write to device
 // in order to trigger some action on the host side
 

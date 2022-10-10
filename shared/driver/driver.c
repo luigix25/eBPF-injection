@@ -40,6 +40,9 @@
 
 #define BUFFER_SIZE 65536
 
+#define NEWDEV_DOORBELL_RESULT_READY        1
+#define NEWDEV_DOORBELL_INJECTION_FINISHED  2
+
 
 MODULE_LICENSE("GPL");
 
@@ -135,7 +138,7 @@ static long newdev_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
         case IOCTL_PROGRAM_RESULT_READY:
         	//bpf program result inserted in buffer area as bpf_injection_msg_t
         	pr_info("response is ready!!! [dev]\n");
-        	iowrite32(1, bufmmio + NEWDEV_REG_DOORBELL);
+        	iowrite32(NEWDEV_DOORBELL_RESULT_READY, bufmmio + NEWDEV_REG_DOORBELL);
         	//signal to device 
         	break;
         case IOCTL_SCHED_SETAFFINITY:	// Deprecated
@@ -236,6 +239,9 @@ static irqreturn_t bottom_half_handler(int irq, void *dev_id){
 	pr_info("waking up interruptible process...\n");
 	flag_read = 2;
 	wake_up_interruptible(&wq);
+
+    //ACK the device that read has been completed
+    iowrite32(NEWDEV_DOORBELL_INJECTION_FINISHED, bufmmio + NEWDEV_REG_DOORBELL);
 
 	return IRQ_HANDLED;
 
