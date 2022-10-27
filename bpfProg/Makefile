@@ -15,9 +15,9 @@ endif
 
 folder:=$(shell mkdir -vp ${BUILD_DIR})
 
-all: ${BUILD_DIR}/bpf_probe
+all: ${BUILD_DIR}/vcpu_pinning
 
-${BUILD_DIR}/bpf_probe: myprog.c
+${BUILD_DIR}/vcpu_pinning: vcpu_pinning.c
 	$(CC) $(CFLAGS) $(LINUXINCLUDE) $(TARGET) -target bpf -g -c $< -o $@
 
 clean:

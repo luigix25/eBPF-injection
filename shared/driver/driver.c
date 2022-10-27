@@ -53,7 +53,6 @@ static struct pci_device_id pci_ids[] = {
 MODULE_DEVICE_TABLE(pci, pci_ids);
 
 static int flag_read, flag_write;
-static int pci_irq;
 static int major;
 static struct pci_dev *pdev;
 static void __iomem *bufmmio;
@@ -174,6 +173,7 @@ static irqreturn_t irq_handler(int irq, void *dev){
     irqreturn_t return_value;
 
 	devi = *(int *)dev;
+
 	if(devi != major){
 		return IRQ_NONE;
 	}
@@ -256,7 +256,6 @@ static irqreturn_t bottom_half_handler(int irq, void *dev_id){
  */
 static int pci_probe(struct pci_dev *dev, const struct pci_device_id *id)
 {
-	u8 val;
 
 	pr_info("pci_probe\n");
 	major = register_chrdev(0, DEV_NAME, &fops);
@@ -285,9 +284,10 @@ static int pci_probe(struct pci_dev *dev, const struct pci_device_id *id)
 	}
 
 	/* IRQ setup. */
-	pci_read_config_byte(dev, PCI_INTERRUPT_LINE, &val);
-	pci_irq = val;
-	if (request_threaded_irq(pci_irq, irq_handler, bottom_half_handler, IRQF_SHARED, "pci_irq_newdev", &major) < 0) {
+
+	pr_info("Major: %d IRQ_LINE %d",major,dev->irq);
+
+	if (request_threaded_irq(dev->irq, irq_handler, bottom_half_handler, IRQF_SHARED, "pci_irq_newdev", &major) != 0) {
 		dev_err(&(dev->dev), "request_irq\n");
 		goto pci_iomap_label;
 	}
@@ -308,7 +308,7 @@ static int pci_probe(struct pci_dev *dev, const struct pci_device_id *id)
 	return 0;
 
 request_irq_label:
-	free_irq(pci_irq, &major); 
+	free_irq(dev->irq, &major);
 pci_iomap_label:
 	pci_iounmap(dev, bufmmio);
 pci_request_region_label:
@@ -325,7 +325,7 @@ static void pci_remove(struct pci_dev *dev)
 {
 	pr_info("pci_remove\n");
 
-	free_irq(pci_irq, &major); 
+	free_irq(dev->irq, &major);
 
 	pci_iounmap(dev, bufmmio);
 	pci_release_region(dev, NEWDEV_BUF_PCI_BAR);
