@@ -126,6 +126,7 @@ int handleProgramInjection(bpf_injection_msg_t message, int dev_fd){
     BpfLoader loader(message);
     int map_fd = loader.loadAndGetMap();
     if(map_fd < 0){
+        cout<<"Map Not Found"<<endl;
         return -1;
     }
 
