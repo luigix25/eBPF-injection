@@ -97,23 +97,15 @@ int handler_ringbuf(void *ctx, void *data, size_t){
     /* Each time a new element is available in the ringbuffer this function is called */
     bpf_event_t *event = static_cast<bpf_event_t*>(data);
 
-    /* DEBUG */
-
-    uint64_t *ptr = (uint64_t*)&event->payload;
-    DBG(
-        cout<<"SIZE "<<event->size<<endl;
-
-        if(*(ptr+1))
-            cout<<"UNPIN"<<endl;
-        else
-            cout<<"PIN"<<endl;
-
-        cout<<"cpu_mask "<<*(ptr)<<endl;
-    );
-
+    //For debug
+    //uint64_t *ptr = (uint64_t*)&event->payload;
+        
     int dev_fd = reinterpret_cast<long>(ctx);
 
-    write(dev_fd,data,event->size + 2*sizeof(uint64_t)); //Type and Payload
+    if(write(dev_fd,data,event->size + 2*sizeof(uint64_t)) == -1){ //Type and Payload
+        cout<<"Can't write to the device\n";
+        return -1;
+    }
     int one = 1;
     ioctl(dev_fd, IOCTL_PROGRAM_RESULT_READY, &one);
 

@@ -31,41 +31,31 @@
 #include <bpf/bpf_tracing.h>
 
 #define DYNAMIC_MEM_TYPE 2
-
-#define _(P) ({typeof(P) val = 0; bpf_probe_read(&val, sizeof(val), &P); val;})
 #define MAX_ENTRIES 4096	//must be a power of two
 
-// Using BPF_MAP_TYPE_ARRAY map type all array elements pre-allocated 
-// and zero initialized at init time
-
-struct bpf_map_def SEC("maps") bpf_ringbuffer = {
-	.type = BPF_MAP_TYPE_RINGBUF,
-	.max_entries = MAX_ENTRIES,
-};
-
-struct bpf_map_def SEC("maps") pids = {
-	.type = BPF_MAP_TYPE_HASH,
-	.key_size = sizeof(u32),
-	.value_size = sizeof(u32),
-	.max_entries = MAX_ENTRIES,
-};
-
+typedef struct {
+	u64 timeslot_start;
+	u64 cpu;
+	u64 counter;
+} counter_t;
 
 typedef struct {
 	u64 type;
 	u64 size;
-	#warning aggiungere campo qui
+	counter_t data;
 } container_t;
 
-/*	System call prototype:	
-		asmlinkage long sys_sched_setaffinity(pid_t pid, unsigned int len,
-					unsigned long __user *user_mask_ptr);
+struct {
+	__uint(type, BPF_MAP_TYPE_RINGBUF);
+	__uint(max_entries, MAX_ENTRIES);
+} bpf_ringbuffer SEC(".maps");
 
-	In-kernel function sched_setaffinity has the following prototype:
-		sched_setaffinity(pid_t pid, const struct cpumask *new_mask);
-
-	This is what we kprobe, not the system call.
-*/
+struct {
+	__uint(type, BPF_MAP_TYPE_PERCPU_ARRAY);
+	__uint(max_entries, 1);
+	__type(key, u32);
+	__type(value, counter_t);
+} counters SEC(".maps");
 
 
 /* kprobe is NOT a stable ABI
@@ -74,7 +64,7 @@ typedef struct {
  * In such case this bpf+kprobe example will no longer be meaningful
 */
 
-int send_to_ringbuff(u64 cpu_set, u64 operation){
+int send_to_ringbuff(u64 cpu, u64 counter, u64 timeslot_start){
 
 	container_t *container_obj;
 	container_obj = bpf_ringbuf_reserve(&bpf_ringbuffer,sizeof(container_t),0);
@@ -84,9 +74,10 @@ int send_to_ringbuff(u64 cpu_set, u64 operation){
 	}
 
 	container_obj->type = DYNAMIC_MEM_TYPE;
-	container_obj->size = 3;//sizeof(cpu_mask_t);
-	//container_obj->cpu_mask_obj.cpu_mask = cpu_set;
-	//container_obj->cpu_mask_obj.operation = operation;
+	container_obj->size = sizeof(counter_t);
+	container_obj->data.cpu = cpu;
+	container_obj->data.counter = counter;
+	container_obj->data.timeslot_start = timeslot_start;
 
 	bpf_ringbuf_submit(container_obj,0);
 
@@ -94,31 +85,48 @@ int send_to_ringbuff(u64 cpu_set, u64 operation){
 
 }
 
-static u64 last_ts = 0;
+#define timeslot_duration 100 	//ms
+#define timeslot_alignment 100
+#define threshold 25			//PER CPU
 
 SEC("kprobe/__swap_writepage")
+//SEC("kprobe/sched_setaffinity")
 int bpf_prog1(struct pt_regs *ctx){
 	
-	
-	//Helper that gets ts since boot
-	u64 time = bpf_ktime_get_ns();
-
-	u64 elapsed = time - last_ts;
-	//considerare quando last_ts è a 0
-	bpf_printk("Elapsed %d\n",elapsed);
-
-	last_ts = time;
-
-
-
-	/*
-	if(send_to_ringbuff()){
-		bpf_printk("Error while sending on the ringbuff\n");
+	u32 index = 0;
+	counter_t *value = bpf_map_lookup_elem(&counters,&index);
+	if(value == NULL){
+		bpf_printk("NULL!\n");
+		//can't happen!
 		return -1;
-	}*/
+	}
 
-	//bpf_map_update_elem(&pids, &pid, &cpu_set, BPF_ANY);	
-	//bpf_printk("Pinned: PID %d\n",pid);
+	//bpf_printk("TS_START: %d",value->timeslot_start);
+
+	//Helper that gets ts since boot
+	u64 time = bpf_ktime_get_ns()/1000; //millisec
+	//bpf_printk("Time: %d",time);
+
+	u64 elapsed = time - value->timeslot_start;
+
+	if(value->timeslot_start == 0 || elapsed >= timeslot_duration){	//first execution or the timeslot is over
+		//timeslot starts are all aligned to 100 ms: 100 200 etc
+		value->timeslot_start = time - (time % timeslot_alignment);
+		value->counter = 1;
+		return 0;
+	}
+	
+	//Same timeslot, increasing counter
+
+	value->counter++;
+
+	if(value->counter >= threshold){
+		if(send_to_ringbuff(bpf_get_smp_processor_id(),value->counter,value->timeslot_start)){
+			bpf_printk("FATAL ERROR: sending on the ringbuff\n");
+			return -1;
+		}
+		value->counter = 0;
+	}
 
     return 0;
 }
