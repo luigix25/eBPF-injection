@@ -35,6 +35,8 @@
 
 typedef struct {
 	u64 timeslot_start;
+	u64 timeslot_duration;
+	u64 global_threshold;
 	u64 cpu;
 	u64 counter;
 } counter_t;
@@ -64,6 +66,11 @@ struct {
  * In such case this bpf+kprobe example will no longer be meaningful
 */
 
+#define TIMESLOT_DURATION 50 	//ms
+#define timeslot_alignment 50
+#define threshold 30			//PER CPU
+#define GLOBAL_THRESHOLD 200
+
 int send_to_ringbuff(u64 cpu, u64 counter, u64 timeslot_start){
 
 	container_t *container_obj;
@@ -78,6 +85,8 @@ int send_to_ringbuff(u64 cpu, u64 counter, u64 timeslot_start){
 	container_obj->data.cpu = cpu;
 	container_obj->data.counter = counter;
 	container_obj->data.timeslot_start = timeslot_start;
+	container_obj->data.timeslot_duration = TIMESLOT_DURATION;
+	container_obj->data.global_threshold = GLOBAL_THRESHOLD;
 
 	bpf_ringbuf_submit(container_obj,0);
 
@@ -85,12 +94,7 @@ int send_to_ringbuff(u64 cpu, u64 counter, u64 timeslot_start){
 
 }
 
-#define timeslot_duration 100 	//ms
-#define timeslot_alignment 100
-#define threshold 25			//PER CPU
-
 SEC("kprobe/__swap_writepage")
-//SEC("kprobe/sched_setaffinity")
 int bpf_prog1(struct pt_regs *ctx){
 	
 	u32 index = 0;
@@ -109,7 +113,7 @@ int bpf_prog1(struct pt_regs *ctx){
 
 	u64 elapsed = time - value->timeslot_start;
 
-	if(value->timeslot_start == 0 || elapsed >= timeslot_duration){	//first execution or the timeslot is over
+	if(value->timeslot_start == 0 || elapsed >= TIMESLOT_DURATION){	//first execution or the timeslot is over
 		//timeslot starts are all aligned to 100 ms: 100 200 etc
 		value->timeslot_start = time - (time % timeslot_alignment);
 		value->counter = 1;
