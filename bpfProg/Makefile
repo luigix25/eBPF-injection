@@ -15,7 +15,7 @@ endif
 
 folder:=$(shell mkdir -vp ${BUILD_DIR})
 
-all: ${BUILD_DIR}/vcpu_pinning ${BUILD_DIR}/memory_swap
+all: ${BUILD_DIR}/vcpu_pinning ${BUILD_DIR}/memory_swap ${BUILD_DIR}/firewall
 
 ${BUILD_DIR}/vcpu_pinning: vcpu_pinning.c
 	$(CC) $(CFLAGS) $(LINUXINCLUDE) $(TARGET) -target bpf -g -c $< -o $@
@@ -23,7 +23,10 @@ ${BUILD_DIR}/vcpu_pinning: vcpu_pinning.c
 ${BUILD_DIR}/memory_swap: memory_swap.c
 	$(CC) $(CFLAGS) $(LINUXINCLUDE) $(TARGET) -target bpf -g -c $< -o $@
 
+${BUILD_DIR}/firewall: firewall.c header.h
+	$(CC) $(CFLAGS) $(LINUXINCLUDE) $(TARGET) -target bpf -g -c $< -o $@
+
 clean:
 	rm -f ${BUILD_DIR}/*
 
-.PHONY: all
+.PHONY: all clean
