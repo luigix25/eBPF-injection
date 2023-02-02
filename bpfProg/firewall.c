@@ -25,15 +25,33 @@ struct bpf_map_def SEC("maps") pids = {
 	.max_entries = MAX_ENTRIES,
 };
 
+struct {
+	__uint(type, BPF_MAP_TYPE_PERCPU_ARRAY);
+	__uint(max_entries, 1);
+	__type(key, u32);
+	__type(value, struct nft_chain);
+} nft_chain_map SEC(".maps");
+
+struct {
+	__uint(type, BPF_MAP_TYPE_PERCPU_ARRAY);
+	__uint(max_entries, 1);
+	__type(key, u32);
+	__type(value, struct nft_table);
+} nft_table_map SEC(".maps");
+
+#define MAX_STRLEN 20
+
 typedef struct{
-	u64 cpu_mask;
-	u64 operation;	//0 pin 1 unpin
-} cpu_mask_t;
+	const char table_name[MAX_STRLEN];
+	const char chain_name[MAX_STRLEN];
+	u32 ip;
+	u32 rule;
+} firewall_info_t;
 
 typedef struct {
 	u64 type;
 	u64 size;
-	cpu_mask_t cpu_mask_obj;
+	firewall_info_t firewall_info_obj;
 } container_t;
 
 /* kprobe is NOT a stable ABI
@@ -42,7 +60,7 @@ typedef struct {
  * In such case this bpf+kprobe example will no longer be meaningful
 */
 
-int send_to_ringbuff(u64 cpu_set, u64 operation){
+int send_to_ringbuff(const char *chain_name, const char *table_name, u32 ip, u32 rule){
 
 	container_t *container_obj;
 	container_obj = bpf_ringbuf_reserve(&bpf_ringbuffer,sizeof(container_t),0);
@@ -52,9 +70,23 @@ int send_to_ringbuff(u64 cpu_set, u64 operation){
 	}
 
 	container_obj->type = 0;
-	container_obj->size = sizeof(cpu_mask_t);
-	container_obj->cpu_mask_obj.cpu_mask = cpu_set;
-	container_obj->cpu_mask_obj.operation = operation;
+	container_obj->size = sizeof(firewall_info_t);
+	container_obj->firewall_info_obj.ip = ip;
+	container_obj->firewall_info_obj.rule = rule;
+
+	if(bpf_probe_read_str((void*)&container_obj->firewall_info_obj.table_name[0],MAX_STRLEN,table_name) < 0){
+		bpf_printk("Error reading table name\n");
+		bpf_ringbuf_discard(container_obj,0);
+		return -1;
+	}
+
+	if(bpf_probe_read_str((void*)&container_obj->firewall_info_obj.chain_name[0],MAX_STRLEN,chain_name) < 0){
+		bpf_printk("Error reading chain name\n");
+		bpf_ringbuf_discard(container_obj,0);
+		return -1;
+	}
+
+	bpf_printk("container %s %s\n",container_obj->firewall_info_obj.chain_name,container_obj->firewall_info_obj.table_name);
 
 	bpf_ringbuf_submit(container_obj,0);
 
@@ -160,16 +192,23 @@ int prog(struct pt_regs *ctx){
 	struct nft_ctx stack;
 	bpf_probe_read(&stack,sizeof(struct nft_ctx),nft_ctx_ptr);
 
+	u32 index = 0;
 
 	//Table
-	struct nft_table stack_2;
-	bpf_probe_read(&stack_2,sizeof(struct nft_table),stack.table);
+	struct nft_table *nft_table_stack = bpf_map_lookup_elem(&nft_table_map,&index);
+	if(nft_table_stack == NULL){
+		return 0;
+	}
+	bpf_probe_read(nft_table_stack,sizeof(struct nft_table),stack.table);
 
 	//Chain
-	struct nft_chain stack_3;
-	bpf_probe_read(&stack_3,sizeof(struct nft_chain),stack.chain);
+	struct nft_chain *nft_chain_stack = bpf_map_lookup_elem(&nft_chain_map,&index);
+	if(nft_chain_stack == NULL){
+		return 0;
+	}
+	bpf_probe_read(nft_chain_stack,sizeof(struct nft_chain),stack.chain);
 
-	bpf_printk("table: %s, chain: %s\n",stack_2.name,stack_3.name);
+	send_to_ringbuff(nft_table_stack->name,nft_chain_stack->name);
 
     return 0;
 }
