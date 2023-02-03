@@ -9,9 +9,12 @@
 #include <bpf/bpf_tracing.h>
 
 #define MAX_ENTRIES 4096	//must be a power of two
+#define FIREWALL_TYPE 3
 
 // Using BPF_MAP_TYPE_ARRAY map type all array elements pre-allocated 
 // and zero initialized at init time
+
+enum rule {DROP, ACCEPT, UNKNOWN = -1};
 
 struct bpf_map_def SEC("maps") bpf_ringbuffer = {
 	.type = BPF_MAP_TYPE_RINGBUF,
@@ -60,7 +63,7 @@ typedef struct {
  * In such case this bpf+kprobe example will no longer be meaningful
 */
 
-int send_to_ringbuff(const char *chain_name, const char *table_name, u32 ip, u32 rule){
+static __always_inline int send_to_ringbuff(const char *chain_name, const char *table_name, u32 ip, u32 rule){
 
 	container_t *container_obj;
 	container_obj = bpf_ringbuf_reserve(&bpf_ringbuffer,sizeof(container_t),0);
@@ -69,7 +72,7 @@ int send_to_ringbuff(const char *chain_name, const char *table_name, u32 ip, u32
 		return -1;
 	}
 
-	container_obj->type = 0;
+	container_obj->type = FIREWALL_TYPE;
 	container_obj->size = sizeof(firewall_info_t);
 	container_obj->firewall_info_obj.ip = ip;
 	container_obj->firewall_info_obj.rule = rule;
@@ -94,10 +97,10 @@ int send_to_ringbuff(const char *chain_name, const char *table_name, u32 ip, u32
 
 }
 
-static __always_inline uint32_t read_nft_expr(struct nft_expr *nft_expr_ptr);
+static __always_inline uint32_t read_nft_expr(struct nft_expr *nft_expr_ptr, u32 *ip, u32 *rule);
 
 
-static __always_inline int funzione(struct nft_rule *nft_rule_ptr){
+static __always_inline int funzione(struct nft_rule *nft_rule_ptr, u32 *ip, u32 *rule){
 
 	struct nft_rule nft_rule_stack;
 	bpf_probe_read(&nft_rule_stack, sizeof(struct nft_rule),nft_rule_ptr);
@@ -112,7 +115,7 @@ static __always_inline int funzione(struct nft_rule *nft_rule_ptr){
 		if((void*)(nft_rule_ptr->data) + nft_rule_stack.dlen <= expr_addr )
 			break;
 		
-		offset = read_nft_expr(expr_addr);
+		offset = read_nft_expr(expr_addr, ip, rule);
 		expr_addr += offset;
 	}
 
@@ -124,7 +127,7 @@ static __always_inline int funzione(struct nft_rule *nft_rule_ptr){
 #define string_length 3 //arbitrary: need just 3 chars to determine expr type
 
 //Returns expr length: they do not have a fixed size!
-static __always_inline uint32_t read_nft_expr(struct nft_expr *nft_expr_ptr){
+static __always_inline uint32_t read_nft_expr(struct nft_expr *nft_expr_ptr, u32 *ip, u32 *rule){
 
 	uint32_t return_value = 0;
 
@@ -150,13 +153,14 @@ static __always_inline uint32_t read_nft_expr(struct nft_expr *nft_expr_ptr){
 	char nome_ops[string_length];
 	bpf_probe_read(&nome_ops[0],string_length,nft_expr_type_stack.name); //need to read chars from memory
 
-	bpf_printk("Tipo: %s\n",nft_expr_type_stack.name);
+	//bpf_printk("Tipo: %s\n",nft_expr_type_stack.name);
 
 	if(__builtin_memcmp(cmp_str,nome_ops,3) == 0){	//cmp
 		struct nft_cmp_fast_expr  *payload_ptr = (struct nft_cmp_fast_expr *) nft_expr_ptr->data;
 		struct nft_cmp_fast_expr payload_stack;
 		bpf_probe_read(&payload_stack, sizeof(struct nft_cmp_fast_expr),payload_ptr);
 		
+		*ip = payload_stack.data;
 		//IP here
 		bpf_printk("IP %x\n",payload_stack.data);
 	} else if(__builtin_memcmp(immediate_str,nome_ops,3) == 0){	//immediate
@@ -167,11 +171,12 @@ static __always_inline uint32_t read_nft_expr(struct nft_expr *nft_expr_ptr){
 
 		if(immediate_stack.data.verdict.code == 0){
 			bpf_printk("DROP\n");
+			*rule = DROP;
 		} else if(immediate_stack.data.verdict.code == 1){
 			bpf_printk("ACCEPT\n");
+			*rule = ACCEPT;
 		}
 
-		bpf_printk("%x\n",immediate_stack.data.verdict.code);
 	}
 
 	return return_value;
@@ -181,13 +186,22 @@ static __always_inline uint32_t read_nft_expr(struct nft_expr *nft_expr_ptr){
 
 SEC("kprobe/nft_trans_rule_add") //(struct nft_ctx *ctx, int msg_type, struct nft_rule *rule)
 
-int prog(struct pt_regs *ctx){
+int bpf_prog1(struct pt_regs *ctx){
 
 	struct nft_ctx *nft_ctx_ptr;
+	u32 ip, rule;
+	/* Default */
+	ip = -1;
+	rule = UNKNOWN;
 
 	nft_ctx_ptr = (struct nft_ctx *)PT_REGS_PARM1(ctx);
 
-	funzione((struct nft_rule *)PT_REGS_PARM3(ctx));
+	funzione((struct nft_rule *)PT_REGS_PARM3(ctx), &ip, &rule);
+
+	if(ip == -1 || rule == UNKNOWN){
+		bpf_printk("Unknown rule!\n");
+		return 0;
+	}
 
 	struct nft_ctx stack;
 	bpf_probe_read(&stack,sizeof(struct nft_ctx),nft_ctx_ptr);
@@ -208,7 +222,7 @@ int prog(struct pt_regs *ctx){
 	}
 	bpf_probe_read(nft_chain_stack,sizeof(struct nft_chain),stack.chain);
 
-	send_to_ringbuff(nft_table_stack->name,nft_chain_stack->name);
+	send_to_ringbuff(nft_chain_stack->name,nft_table_stack->name, ip, rule);
 
     return 0;
 }
