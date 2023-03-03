@@ -21,7 +21,7 @@
  * DEALINGS IN THE SOFTWARE.
  */
 
-#include <uapi/linux/bpf.h>
+#include <linux/bpf.h>
 #include <linux/version.h>
 #include <linux/types.h>
 
@@ -30,20 +30,22 @@
 #include <bpf/bpf_helpers.h>
 #include <bpf/bpf_tracing.h>
 
+#include <stdint.h>
+
 #define DYNAMIC_MEM_TYPE 2
 #define MAX_ENTRIES 4096	//must be a power of two
 
 typedef struct {
-	u64 timeslot_start;
-	u64 timeslot_duration;
-	u64 global_threshold;
-	u64 cpu;
-	u64 counter;
+	uint64_t timeslot_start;
+	uint64_t timeslot_duration;
+	uint64_t global_threshold;
+	uint64_t cpu;
+	uint64_t counter;
 } counter_t;
 
 typedef struct {
-	u64 type;
-	u64 size;
+	uint64_t type;
+	uint64_t size;
 	counter_t data;
 } container_t;
 
@@ -55,7 +57,7 @@ struct {
 struct {
 	__uint(type, BPF_MAP_TYPE_PERCPU_ARRAY);
 	__uint(max_entries, 1);
-	__type(key, u32);
+	__type(key, uint32_t);
 	__type(value, counter_t);
 } counters SEC(".maps");
 
@@ -66,12 +68,12 @@ struct {
  * In such case this bpf+kprobe example will no longer be meaningful
 */
 
-#define TIMESLOT_DURATION 50 	//ms
-#define timeslot_alignment 50
-#define threshold 30			//PER CPU
-#define GLOBAL_THRESHOLD 200
+#define TIMESLOT_DURATION 100 	//ms
+#define timeslot_alignment 100
+#define threshold 0			//PER CPU
+#define GLOBAL_THRESHOLD 3
 
-int send_to_ringbuff(u64 cpu, u64 counter, u64 timeslot_start){
+int send_to_ringbuff(uint64_t cpu, uint64_t counter, uint64_t timeslot_start){
 
 	container_t *container_obj;
 	container_obj = bpf_ringbuf_reserve(&bpf_ringbuffer,sizeof(container_t),0);
@@ -94,10 +96,10 @@ int send_to_ringbuff(u64 cpu, u64 counter, u64 timeslot_start){
 
 }
 
-SEC("kprobe/__swap_writepage")
+SEC("kprobe/balance_pgdat")
 int bpf_prog1(struct pt_regs *ctx){
 	
-	u32 index = 0;
+	uint32_t index = 0;
 	counter_t *value = bpf_map_lookup_elem(&counters,&index);
 	if(value == NULL){
 		bpf_printk("NULL!\n");
@@ -105,24 +107,26 @@ int bpf_prog1(struct pt_regs *ctx){
 		return -1;
 	}
 
+	bpf_printk("ciao %d\n",value->counter);	
+
 	//bpf_printk("TS_START: %d",value->timeslot_start);
 
 	//Helper that gets ts since boot
-	u64 time = bpf_ktime_get_ns()/1000; //millisec
+	uint64_t time = bpf_ktime_get_ns()/1000; //millisec
 	//bpf_printk("Time: %d",time);
 
-	u64 elapsed = time - value->timeslot_start;
+	uint64_t elapsed = time - value->timeslot_start;
 
 	if(value->timeslot_start == 0 || elapsed >= TIMESLOT_DURATION){	//first execution or the timeslot is over
 		//timeslot starts are all aligned to 100 ms: 100 200 etc
 		value->timeslot_start = time - (time % timeslot_alignment);
 		value->counter = 1;
-		return 0;
+		//return 0;
 	}
 	
 	//Same timeslot, increasing counter
 
-	value->counter++;
+	//value->counter++;
 
 	if(value->counter >= threshold){
 		if(send_to_ringbuff(bpf_get_smp_processor_id(),value->counter,value->timeslot_start)){
@@ -136,5 +140,5 @@ int bpf_prog1(struct pt_regs *ctx){
 }
 
 char _license[] SEC("license") = "GPL";
-u32 _version SEC("version") = LINUX_VERSION_CODE;		
+uint32_t _version SEC("version") = LINUX_VERSION_CODE;		
 //Useful because kprobe is NOT a stable ABI. (wrong version fails to be loaded)

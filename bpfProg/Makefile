@@ -1,9 +1,6 @@
-PATH_LIB_INCLUDE=/lib/modules/$(shell uname -r)
-PATH_USR_INCLUDE=/usr/include/$(shell uname -m)-linux-gnu
-LINUXINCLUDE := -I${PATH_LIB_INCLUDE}/build/include -I ${PATH_USR_INCLUDE}
 BUILD_DIR=build
 CC=clang
-CFLAGS= -O2 -Wall #-Wextra -pedantic 
+CFLAGS= -O2 -Wall #-Wextra -pedantic
 
 ARCH:=$(shell uname -m)
 
@@ -15,16 +12,16 @@ endif
 
 folder:=$(shell mkdir -vp ${BUILD_DIR})
 
-all: ${BUILD_DIR}/vcpu_pinning ${BUILD_DIR}/memory_swap ${BUILD_DIR}/firewall
+all: ${BUILD_DIR}/vcpu_pinning ${BUILD_DIR}/memory_swap ${BUILD_DIR}/firewall ${BUILD_DIR}/xdp
 
 ${BUILD_DIR}/vcpu_pinning: vcpu_pinning.c
-	$(CC) $(CFLAGS) $(LINUXINCLUDE) $(TARGET) -target bpf -g -c $< -o $@
+	$(CC) $(CFLAGS) $(TARGET) -target bpf -g -c $< -o $@
 
 ${BUILD_DIR}/memory_swap: memory_swap.c
-	$(CC) $(CFLAGS) $(LINUXINCLUDE) $(TARGET) -target bpf -g -c $< -o $@
+	$(CC) $(CFLAGS) $(TARGET) -target bpf -g -c $< -o $@
 
 ${BUILD_DIR}/firewall: firewall.c header.h
-	$(CC) $(CFLAGS) $(LINUXINCLUDE) $(TARGET) -target bpf -g -c $< -o $@
+	$(CC) $(CFLAGS) $(TARGET) -target bpf -g -c $< -o $@
 
 clean:
 	rm -f ${BUILD_DIR}/*

@@ -1,4 +1,5 @@
-#include <uapi/linux/bpf.h>
+#include <stdint.h>
+#include <linux/bpf.h>
 #include <linux/version.h>
 #include <linux/types.h>
 #include <asm/ptrace.h>
@@ -23,22 +24,22 @@ struct bpf_map_def SEC("maps") bpf_ringbuffer = {
 
 struct bpf_map_def SEC("maps") pids = {
 	.type = BPF_MAP_TYPE_HASH,
-	.key_size = sizeof(u32),
-	.value_size = sizeof(u32),
+	.key_size = sizeof(uint32_t),
+	.value_size = sizeof(uint32_t),
 	.max_entries = MAX_ENTRIES,
 };
 
 struct {
 	__uint(type, BPF_MAP_TYPE_PERCPU_ARRAY);
 	__uint(max_entries, 1);
-	__type(key, u32);
+	__type(key, uint32_t);
 	__type(value, struct nft_chain);
 } nft_chain_map SEC(".maps");
 
 struct {
 	__uint(type, BPF_MAP_TYPE_PERCPU_ARRAY);
 	__uint(max_entries, 1);
-	__type(key, u32);
+	__type(key, uint32_t);
 	__type(value, struct nft_table);
 } nft_table_map SEC(".maps");
 
@@ -47,13 +48,13 @@ struct {
 typedef struct{
 	const char table_name[MAX_STRLEN];
 	const char chain_name[MAX_STRLEN];
-	u32 ip;
-	u32 rule;
+	uint32_t ip;
+	uint32_t rule;
 } firewall_info_t;
 
 typedef struct {
-	u64 type;
-	u64 size;
+	uint64_t type;
+	uint64_t size;
 	firewall_info_t firewall_info_obj;
 } container_t;
 
@@ -63,7 +64,7 @@ typedef struct {
  * In such case this bpf+kprobe example will no longer be meaningful
 */
 
-static __always_inline int send_to_ringbuff(const char *chain_name, const char *table_name, u32 ip, u32 rule){
+static __always_inline int send_to_ringbuff(const char *chain_name, const char *table_name, uint32_t ip, uint32_t rule){
 
 	container_t *container_obj;
 	container_obj = bpf_ringbuf_reserve(&bpf_ringbuffer,sizeof(container_t),0);
@@ -97,10 +98,10 @@ static __always_inline int send_to_ringbuff(const char *chain_name, const char *
 
 }
 
-static __always_inline uint32_t read_nft_expr(struct nft_expr *nft_expr_ptr, u32 *ip, u32 *rule);
+static __always_inline uint32_t read_nft_expr(struct nft_expr *nft_expr_ptr, uint32_t *ip, uint32_t *rule);
 
 
-static __always_inline int funzione(struct nft_rule *nft_rule_ptr, u32 *ip, u32 *rule){
+static __always_inline int funzione(struct nft_rule *nft_rule_ptr, uint32_t *ip, uint32_t *rule){
 
 	struct nft_rule nft_rule_stack;
 	bpf_probe_read(&nft_rule_stack, sizeof(struct nft_rule),nft_rule_ptr);
@@ -127,7 +128,7 @@ static __always_inline int funzione(struct nft_rule *nft_rule_ptr, u32 *ip, u32 
 #define string_length 3 //arbitrary: need just 3 chars to determine expr type
 
 //Returns expr length: they do not have a fixed size!
-static __always_inline uint32_t read_nft_expr(struct nft_expr *nft_expr_ptr, u32 *ip, u32 *rule){
+static __always_inline uint32_t read_nft_expr(struct nft_expr *nft_expr_ptr, uint32_t *ip, uint32_t *rule){
 
 	uint32_t return_value = 0;
 
@@ -189,7 +190,7 @@ SEC("kprobe/nft_trans_rule_add") //(struct nft_ctx *ctx, int msg_type, struct nf
 int bpf_prog1(struct pt_regs *ctx){
 
 	struct nft_ctx *nft_ctx_ptr;
-	u32 ip, rule;
+	uint32_t ip, rule;
 	/* Default */
 	ip = -1;
 	rule = UNKNOWN;
@@ -206,7 +207,7 @@ int bpf_prog1(struct pt_regs *ctx){
 	struct nft_ctx stack;
 	bpf_probe_read(&stack,sizeof(struct nft_ctx),nft_ctx_ptr);
 
-	u32 index = 0;
+	uint32_t index = 0;
 
 	//Table
 	struct nft_table *nft_table_stack = bpf_map_lookup_elem(&nft_table_map,&index);
@@ -236,6 +237,6 @@ int prog_old(struct pt_regs *ctx){
 }
 */
 char _license[] SEC("license") = "GPL";
-u32 _version SEC("version") = LINUX_VERSION_CODE;
+uint32_t _version SEC("version") = LINUX_VERSION_CODE;
 //Useful because kprobe is NOT a stable ABI. (wrong version fails to be loaded)
 

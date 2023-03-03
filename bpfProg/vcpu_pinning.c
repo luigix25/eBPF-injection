@@ -21,7 +21,7 @@
  * DEALINGS IN THE SOFTWARE.
  */
 
-#include <uapi/linux/bpf.h>
+#include <linux/bpf.h>
 #include <linux/version.h>
 #include <linux/types.h>
 
@@ -29,6 +29,9 @@
 
 #include <bpf/bpf_helpers.h>
 #include <bpf/bpf_tracing.h>
+
+#include <stdint.h>
+#include <sys/types.h>
 
 #define VCPU_PINNING_TYPE 1
 
@@ -47,19 +50,19 @@ struct bpf_map_def SEC("maps") bpf_ringbuffer = {
 
 struct bpf_map_def SEC("maps") pids = {
 	.type = BPF_MAP_TYPE_HASH,
-	.key_size = sizeof(u32),
-	.value_size = sizeof(u32),
+	.key_size = sizeof(uint32_t),
+	.value_size = sizeof(uint32_t),
 	.max_entries = MAX_ENTRIES,
 };
 
 typedef struct{
-	u64 cpu_mask;
-	u64 operation;	//0 pin 1 unpin
+	uint64_t cpu_mask;
+	uint64_t operation;	//0 pin 1 unpin
 } cpu_mask_t;
 
 typedef struct {
-	u64 type;
-	u64 size;
+	uint64_t type;
+	uint64_t size;
 	cpu_mask_t cpu_mask_obj;
 } container_t;
 
@@ -80,7 +83,7 @@ typedef struct {
  * In such case this bpf+kprobe example will no longer be meaningful
 */
 
-int send_to_ringbuff(u64 cpu_set, u64 operation){
+int send_to_ringbuff(uint64_t cpu_set, uint64_t operation){
 
 	container_t *container_obj;
 	container_obj = bpf_ringbuf_reserve(&bpf_ringbuffer,sizeof(container_t),0);
@@ -102,8 +105,8 @@ int send_to_ringbuff(u64 cpu_set, u64 operation){
 
 SEC("kprobe/sched_setaffinity")
 int bpf_prog1(struct pt_regs *ctx){
-	u32 pid;
-	u64 cpu_set;
+	uint32_t pid;
+	uint64_t cpu_set;
 	
 	//If pid == 0, means current process
 	pid = (pid_t)PT_REGS_PARM1(ctx);
@@ -115,9 +118,9 @@ int bpf_prog1(struct pt_regs *ctx){
 	if(bpf_probe_read(&cpu_set, 8, (void*)PT_REGS_PARM2(ctx)))
 		return 0;
 
-	u64 operation = PIN;
+	uint64_t operation = PIN;
 
-	if(cpu_set == (u64)-1){ //unpinning
+	if(cpu_set == (uint64_t)-1){ //unpinning
 		bpf_map_delete_elem(&pids,&pid);
 		operation = UNPIN;
 	}
@@ -136,15 +139,15 @@ int bpf_prog1(struct pt_regs *ctx){
 
 SEC("kprobe/do_exit")
 int probe_do_exit(struct pt_regs *ctx){
-	u32 pid = bpf_get_current_pid_tgid() >> 32;
-	u32 *elem;
+	uint32_t pid = bpf_get_current_pid_tgid() >> 32;
+	uint32_t *elem;
 
-	elem = (u32*)bpf_map_lookup_elem(&pids,&pid);
+	elem = (uint32_t*)bpf_map_lookup_elem(&pids,&pid);
 	if(!elem){
 		return 0;
 	} 
 
-	if(send_to_ringbuff((u64)(*elem),UNPIN)){
+	if(send_to_ringbuff((uint64_t)(*elem),UNPIN)){
 		bpf_printk("Error while sending on the ringbuff\n");
 		return -1;
 	}
@@ -158,5 +161,5 @@ int probe_do_exit(struct pt_regs *ctx){
 
 
 char _license[] SEC("license") = "GPL";
-u32 _version SEC("version") = LINUX_VERSION_CODE;		
+uint32_t _version SEC("version") = LINUX_VERSION_CODE;		
 //Useful because kprobe is NOT a stable ABI. (wrong version fails to be loaded)

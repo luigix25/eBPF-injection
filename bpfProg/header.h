@@ -1,28 +1,17 @@
 //#include <stdint.h>
-
-/*
-typedef unsigned char  u8;
-typedef unsigned short u16;
-typedef unsigned int   u32;
-typedef unsigned long   u64;
-
-typedef char  s8;
-typedef short s16;
-typedef int   s32;
-typedef long  s64;
-*/
+#include <stdbool.h>
 
 struct nft_ctx {
 	uint64_t *            		net;                 /*     0     8 */
 	struct nft_table *         table;                /*     8     8 */
 	struct nft_chain *         chain;                /*    16     8 */
 	void * nla;              					     /*    24     8 */
-	u32                        portid;               /*    32     4 */
-	u32                        seq;                  /*    36     4 */
-	u16                        flags;                /*    40     2 */
-	u8                         family;               /*    42     1 */
-	u8                         level;                /*    43     1 */
-	u8 	                       report;               /*    44     1 */
+	uint32_t                        portid;               /*    32     4 */
+	uint32_t                        seq;                  /*    36     4 */
+	uint16_t                        flags;                /*    40     2 */
+	uint8_t                         family;               /*    42     1 */
+	uint8_t                         level;                /*    43     1 */
+	uint8_t 	                       report;               /*    44     1 */
 
 	/* size: 48, cachelines: 1, members: 10 */
 	/* padding: 3 */
@@ -38,26 +27,26 @@ struct nft_table {
 	uint64_t           		    objects[2];              /*   184    16 */
 	/* --- cacheline 3 boundary (192 bytes) was 8 bytes ago --- */
 	uint64_t           			flowtables[2];           /*   200    16 */
-	u64                        hgenerator;           /*   216     8 */
-	u64                        handle;               /*   224     8 */
-	u32                        use;                  /*   232     4 */
-	u16                        family:6;             /*   236: 0  2 */
-	u16                        flags:8;              /*   236: 6  2 */
-	u16                        genmask:2;            /*   236:14  2 */
+	uint64_t                        hgenerator;           /*   216     8 */
+	uint64_t                        handle;               /*   224     8 */
+	uint32_t                        use;                  /*   232     4 */
+	uint16_t                        family:6;             /*   236: 0  2 */
+	uint16_t                        flags:8;              /*   236: 6  2 */
+	uint16_t                        genmask:2;            /*   236:14  2 */
 
 	/* XXX 2 bytes hole, try to pack */
 
-	u32                        nlpid;                /*   240     4 */
+	uint32_t                        nlpid;                /*   240     4 */
 
 	/* XXX 4 bytes hole, try to pack */
 
 	char *                     name;                 /*   248     8 */
 	/* --- cacheline 4 boundary (256 bytes) --- */
-	u16                        udlen;                /*   256     2 */
+	uint16_t                        udlen;                /*   256     2 */
 
 	/* XXX 6 bytes hole, try to pack */
 
-	u8 *                       udata;                /*   264     8 */
+	uint8_t *                       udata;                /*   264     8 */
 
 	/* size: 272, cachelines: 5, members: 16 */
 	/* sum members: 258, holes: 3, sum holes: 12 */
@@ -73,20 +62,20 @@ struct nft_chain {
 	uint64_t        		   rhlhead[2];              /*    48    16 */
 	/* --- cacheline 1 boundary (64 bytes) --- */
 	struct nft_table *         table;                /*    64     8 */
-	u64                        handle;               /*    72     8 */
-	u32                        use;                  /*    80     4 */
-	u8                         flags:5;              /*    84: 0  1 */
-	u8                         bound:1;              /*    84: 5  1 */
-	u8                         genmask:2;            /*    84: 6  1 */
+	uint64_t                        handle;               /*    72     8 */
+	uint32_t                        use;                  /*    80     4 */
+	uint8_t                         flags:5;              /*    84: 0  1 */
+	uint8_t                         bound:1;              /*    84: 5  1 */
+	uint8_t                         genmask:2;            /*    84: 6  1 */
 
 	/* XXX 3 bytes hole, try to pack */
 
 	char *                     name;                 /*    88     8 */
-	u16                        udlen;                /*    96     2 */
+	uint16_t                        udlen;                /*    96     2 */
 
 	/* XXX 6 bytes hole, try to pack */
 
-	u8 *                       udata;                /*   104     8 */
+	uint8_t *                       udata;                /*   104     8 */
 	struct nft_rule * *        rules_next;           /*   112     8 */
 
 	/* size: 120, cachelines: 2, members: 15 */
@@ -97,10 +86,10 @@ struct nft_chain {
 
 struct nft_rule {
 	uint64_t           		   list[2];                 /*     0    16 */
-	u64                        handle:42;            /*    16: 0  8 */
-	u64                        genmask:2;            /*    16:42  8 */
-	u64                        dlen:12;              /*    16:44  8 */
-	u64                        udata:1;              /*    16:56  8 */
+	uint64_t                        handle:42;            /*    16: 0  8 */
+	uint64_t                        genmask:2;            /*    16:42  8 */
+	uint64_t                        dlen:12;              /*    16:44  8 */
+	uint64_t                        udata:1;              /*    16:56  8 */
 
 	/* XXX 7 bits hole, try to pack */
 
@@ -117,7 +106,7 @@ struct nft_rule {
 struct nft_expr {
 	const struct nft_expr_ops	*ops;
 	unsigned char			data[]
-		__attribute__((aligned(__alignof__(u64))));
+		__attribute__((aligned(__alignof__(uint64_t))));
 };
 
 struct nft_expr_ops {
@@ -149,8 +138,8 @@ struct nft_expr_type {
 	struct module			*owner;
 	const struct nla_policy		*policy;
 	unsigned int			maxattr;
-	u8				family;
-	u8				flags;
+	uint8_t				family;
+	uint8_t				flags;
 };
 
 
@@ -164,9 +153,9 @@ enum nft_payload_bases {
 
 struct nft_payload {
 	enum nft_payload_bases	base:8;
-	u8			offset;
-	u8			len;
-	u8			dreg;
+	uint8_t			offset;
+	uint8_t			len;
+	uint8_t			dreg;
 };
 
 enum nft_cmp_ops {
@@ -179,34 +168,34 @@ enum nft_cmp_ops {
 };
 
 struct nft_verdict {
-	u32				code;
+	uint32_t				code;
 	struct nft_chain		*chain;
 };
 
 struct nft_data {
 	union {
-		u32			data[4];
+		uint32_t			data[4];
 		struct nft_verdict	verdict;
 	};
-} __attribute__((aligned(__alignof__(u64))));
+} __attribute__((aligned(__alignof__(uint64_t))));
 
 struct nft_cmp_expr {
 	struct nft_data		data;
-	u8			sreg;
-	u8			len;
+	uint8_t			sreg;
+	uint8_t			len;
 	enum nft_cmp_ops	op:8;
 };
 
 struct nft_cmp_fast_expr {
-	u32			data;
-	u32			mask;
-	u8			sreg;
-	u8			len;
+	uint32_t			data;
+	uint32_t			mask;
+	uint8_t			sreg;
+	uint8_t			len;
 	bool			inv;
 };
 
 struct nft_immediate_expr {
 	struct nft_data		data;
-	u8			dreg;
-	u8			dlen;
+	uint8_t			dreg;
+	uint8_t			dlen;
 };
