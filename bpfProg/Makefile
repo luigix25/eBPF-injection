@@ -23,6 +23,9 @@ ${BUILD_DIR}/memory_swap: memory_swap.c
 ${BUILD_DIR}/firewall: firewall.c header.h
 	$(CC) $(CFLAGS) $(TARGET) -target bpf -g -c $< -o $@
 
+${BUILD_DIR}/xdp: xdp.c
+	$(CC) $(CFLAGS) $(TARGET) -target bpf -c $< -o $@
+
 clean:
 	rm -f ${BUILD_DIR}/*
 

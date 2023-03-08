@@ -22,13 +22,6 @@ struct bpf_map_def SEC("maps") bpf_ringbuffer = {
 	.max_entries = MAX_ENTRIES,
 };
 
-struct bpf_map_def SEC("maps") pids = {
-	.type = BPF_MAP_TYPE_HASH,
-	.key_size = sizeof(uint32_t),
-	.value_size = sizeof(uint32_t),
-	.max_entries = MAX_ENTRIES,
-};
-
 struct {
 	__uint(type, BPF_MAP_TYPE_PERCPU_ARRAY);
 	__uint(max_entries, 1);
@@ -101,7 +94,7 @@ static __always_inline int send_to_ringbuff(const char *chain_name, const char *
 static __always_inline uint32_t read_nft_expr(struct nft_expr *nft_expr_ptr, uint32_t *ip, uint32_t *rule);
 
 
-static __always_inline int funzione(struct nft_rule *nft_rule_ptr, uint32_t *ip, uint32_t *rule){
+static __always_inline int analyze_nft_rule(struct nft_rule *nft_rule_ptr, uint32_t *ip, uint32_t *rule){
 
 	struct nft_rule nft_rule_stack;
 	bpf_probe_read(&nft_rule_stack, sizeof(struct nft_rule),nft_rule_ptr);
@@ -197,7 +190,7 @@ int bpf_prog1(struct pt_regs *ctx){
 
 	nft_ctx_ptr = (struct nft_ctx *)PT_REGS_PARM1(ctx);
 
-	funzione((struct nft_rule *)PT_REGS_PARM3(ctx), &ip, &rule);
+	analyze_nft_rule((struct nft_rule *)PT_REGS_PARM3(ctx), &ip, &rule);
 
 	if(ip == -1 || rule == UNKNOWN){
 		bpf_printk("Unknown rule!\n");
@@ -228,14 +221,7 @@ int bpf_prog1(struct pt_regs *ctx){
     return 0;
 }
 
-/*
-SEC("kprobe/nft_expr_dump")
-int prog_old(struct pt_regs *ctx){
-	//bpf_printk("nft_expr_dump\n");
-	read_nft_expr((struct nft_expr *)PT_REGS_PARM3(ctx));
-	return 0;
-}
-*/
+
 char _license[] SEC("license") = "GPL";
 uint32_t _version SEC("version") = LINUX_VERSION_CODE;
 //Useful because kprobe is NOT a stable ABI. (wrong version fails to be loaded)
