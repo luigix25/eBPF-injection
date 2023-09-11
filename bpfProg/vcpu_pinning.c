@@ -40,20 +40,20 @@
 #define PIN 0
 #define UNPIN 1
 
-// Using BPF_MAP_TYPE_ARRAY map type all array elements pre-allocated 
+// Using BPF_MAP_TYPE_ARRAY map type all array elements pre-allocated
 // and zero initialized at init time
 
-struct bpf_map_def SEC("maps") bpf_ringbuffer = {
-	.type = BPF_MAP_TYPE_RINGBUF,
-	.max_entries = MAX_ENTRIES,
-};
+struct {
+	__uint(type, BPF_MAP_TYPE_RINGBUF);
+	__uint(max_entries, MAX_ENTRIES);
+} bpf_ringbuffer SEC(".maps");
 
-struct bpf_map_def SEC("maps") pids = {
-	.type = BPF_MAP_TYPE_HASH,
-	.key_size = sizeof(uint32_t),
-	.value_size = sizeof(uint32_t),
-	.max_entries = MAX_ENTRIES,
-};
+struct {
+	__uint(type, BPF_MAP_TYPE_HASH);
+	__uint(max_entries, MAX_ENTRIES);
+	__type(key, uint32_t);
+	__type(value, uint32_t);
+} pids SEC(".maps");
 
 typedef struct{
 	uint64_t cpu_mask;
@@ -66,7 +66,7 @@ typedef struct {
 	cpu_mask_t cpu_mask_obj;
 } container_t;
 
-/*	System call prototype:	
+/*	System call prototype:
 		asmlinkage long sys_sched_setaffinity(pid_t pid, unsigned int len,
 					unsigned long __user *user_mask_ptr);
 
@@ -107,7 +107,7 @@ SEC("kprobe/sched_setaffinity")
 int bpf_prog1(struct pt_regs *ctx){
 	uint32_t pid;
 	uint64_t cpu_set;
-	
+
 	//If pid == 0, means current process
 	pid = (pid_t)PT_REGS_PARM1(ctx);
 	if(pid == 0){
@@ -130,7 +130,7 @@ int bpf_prog1(struct pt_regs *ctx){
 		return -1;
 	}
 
-	bpf_map_update_elem(&pids, &pid, &cpu_set, BPF_ANY);	
+	bpf_map_update_elem(&pids, &pid, &cpu_set, BPF_ANY);
 	bpf_printk("Pinned: PID %d\n",pid);
 
     return 0;
@@ -145,7 +145,7 @@ int probe_do_exit(struct pt_regs *ctx){
 	elem = (uint32_t*)bpf_map_lookup_elem(&pids,&pid);
 	if(!elem){
 		return 0;
-	} 
+	}
 
 	if(send_to_ringbuff((uint64_t)(*elem),UNPIN)){
 		bpf_printk("Error while sending on the ringbuff\n");
@@ -154,12 +154,12 @@ int probe_do_exit(struct pt_regs *ctx){
 
 	bpf_printk("DO exit: PID %d\n",pid);
 	bpf_map_delete_elem(&pids,&pid);
-	
-	
+
+
 	return 0;
 }
 
 
 char _license[] SEC("license") = "GPL";
-uint32_t _version SEC("version") = LINUX_VERSION_CODE;		
+uint32_t _version SEC("version") = LINUX_VERSION_CODE;
 //Useful because kprobe is NOT a stable ABI. (wrong version fails to be loaded)
