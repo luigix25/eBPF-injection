@@ -17,6 +17,7 @@ modules.*
 
 #qemu disks
 *.qcow2
+*.gz
 
 #All Build Folders
 build/

@@ -85,6 +85,7 @@ struct bpf_injection_msg_t prepare_bpf_injection_message(const char* path){
 	int len;
 	mymsg.header.version = DEFAULT_VERSION;
 	mymsg.header.type = PROGRAM_INJECTION;
+	mymsg.header.service = 1;
 	FILE* fp = fopen(path, "r");
 	if(fp) {
 		fseek(fp, 0 , SEEK_END);

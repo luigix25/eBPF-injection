@@ -5,8 +5,6 @@
 
 #include <bpf_injection_header.h>
 
-using namespace std;
-
 class BpfLoader
 {
     private:

@@ -1,4 +1,5 @@
 #include "BpfLoader.h"
+using namespace std;
 
 BpfLoader::BpfLoader(bpf_injection_msg_t message){
     this->obj = bpf_object__open_mem(message.payload,message.header.payload_len,NULL);

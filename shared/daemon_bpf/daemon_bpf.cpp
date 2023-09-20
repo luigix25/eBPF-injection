@@ -30,7 +30,7 @@
 
 #include <sys/mman.h>
 //#include <sys/stat.h>
-#include <sys/ioctl.h> 
+#include <sys/ioctl.h>
 #include <sys/syscall.h>
 
 
@@ -44,11 +44,12 @@ using namespace std;
 
 #include <bpf_injection_msg.h>
 #include "BpfLoader.h"
+#include "ServiceList.h"
 
 #define DEBUG
 
 #ifdef DEBUG
-    #define DBG(x) x 
+    #define DBG(x) x
 #else
     #define DBG(x)
 #endif
@@ -58,7 +59,7 @@ using namespace std;
 
 bpf_injection_msg_t recv_bpf_injection_msg(int fd){
 	bpf_injection_msg_t mymsg;
-	int32_t len, payload_left;	
+	int32_t len, payload_left;
 	mymsg.header.type = ERROR;
 
 	cout<<"Waiting for a bpf_message_header.."<<endl;
@@ -78,8 +79,8 @@ bpf_injection_msg_t recv_bpf_injection_msg(int fd){
 	payload_left = mymsg.header.payload_len;
     uint8_t *addr = static_cast<uint8_t*>(mymsg.payload);
 
-	while(payload_left > 0){	
-        	
+	while(payload_left > 0){
+
 		len = read(fd, addr, payload_left);
 		if (len < 0) {
 			perror("read: ");
@@ -97,23 +98,58 @@ int handler_ringbuf(void *ctx, void *data, size_t){
     /* Each time a new element is available in the ringbuffer this function is called */
     bpf_event_t *event = static_cast<bpf_event_t*>(data);
 
+    uint32_t data_len = sizeof(bpf_injection_msg_header) + event->size;
+
+    bpf_injection_msg_header *hdr = (bpf_injection_msg_header*)malloc(data_len);
+    hdr->payload_len = event->size;
+    hdr->service = event->type;
+    hdr->type = PROGRAM_INJECTION_RESULT;
+    hdr->version = 1;
+
+    memcpy(hdr+sizeof(hdr),&event->payload,hdr->payload_len);
+
     //For debug
     //uint64_t *ptr = (uint64_t*)&event->payload;
-        
+
     int dev_fd = reinterpret_cast<long>(ctx);
 
-    if(write(dev_fd,data,event->size + 2*sizeof(uint64_t)) == -1){ //Type and Payload
+    if(write(dev_fd,hdr,data_len) == -1){ //Type and Payload
         cout<<"Can't write to the device\n";
+        free(hdr);
         return -1;
     }
-    int one = 1;
-    ioctl(dev_fd, IOCTL_PROGRAM_RESULT_READY, &one);
 
+    free(hdr);
     return 0;
 
 }
 
-int handleProgramInjection(bpf_injection_msg_t message, int dev_fd){
+void sendAck(int dev_fd,uint8_t service, bool success){
+
+    //header + payload (1 byte)
+    uint16_t buf_length = sizeof(bpf_injection_msg_header) + sizeof(bpf_injection_ack);
+    uint8_t *buffer = (uint8_t*) malloc(buf_length);
+
+    bpf_injection_msg_header *message = reinterpret_cast<bpf_injection_msg_header*>(buffer);
+    message->type = PROGRAM_INJECTION_ACK;
+    message->version = DEFAULT_VERSION;
+    message->payload_len = sizeof(bpf_injection_ack);
+    message->service = service;
+
+    bpf_injection_ack *payload = reinterpret_cast<bpf_injection_ack *>(buffer+sizeof(bpf_injection_msg_header));
+    payload->status = (success) ? INJECTION_OK : INJECTION_FAIL;
+
+    int8_t res = write(dev_fd,buffer,buf_length);
+    if(res <= 0){
+        cout<<"Error while sending ACK"<<endl;
+    }
+
+    printf("Ack sent!\n");
+    free(buffer);
+
+}
+
+int handleProgramInjection(int dev_fd, bpf_injection_msg_t message){
 
     BpfLoader loader(message);
     int map_fd = loader.loadAndGetMap();
@@ -125,6 +161,8 @@ int handleProgramInjection(bpf_injection_msg_t message, int dev_fd){
     ring_buffer *buffer_bpf = ring_buffer__new(map_fd,handler_ringbuf,(void*)(long)dev_fd,NULL);
     cout<<"[LOG] Starting operations"<<endl;
 
+    sendAck(dev_fd,message.header.service,true);
+
     while(true){
         ring_buffer__poll(buffer_bpf,50);   //50 ms sleep
         continue;
@@ -134,50 +172,51 @@ int handleProgramInjection(bpf_injection_msg_t message, int dev_fd){
 int main(){
 
     cout<<"[LOG] Starting Guest Agent"<<endl;
-	
-    int fd = open("/dev/newdev",O_RDWR);
+
+    int fd = open("/dev/virtio-ports/org.fedoraproject.port.0",O_RDWR);
     if(fd < 0){
         cout<<"Error while opening device"<<endl;
         return -1;
     }
 
-    pid_t pid, child_pid;
-    child_pid = -1;
+    ServiceList list;
 
     while(true){
 
         bpf_injection_msg_t message = recv_bpf_injection_msg(fd);
 
-        pid = fork();
-        if(pid == -1){
-            cerr<<"Fork failed\n";
-            exit(-1);
-        } else if(pid != 0){            //parent
-            if(child_pid != -1){
-                cout<<"[LOG] Killing Old BPF Program"<<endl;
-                kill(child_pid, SIGKILL);
+        if(message.header.type == PROGRAM_INJECTION){
+
+            Service s = list.findService(message.header.service);
+            pid_t pid;
+
+            if(s.service_id != (uint8_t)-1){
+                cout<<"Unloading Service n: "<<(int)s.service_id<<"\n";
+                kill(s.pid,SIGKILL);
             }
 
-            child_pid = pid;
-            //Parent keeps listening for new messages
-            continue;
-        }
 
-        //Parent will never reach here.
-        //Child will handle the injection
+            pid = fork();
 
-        switch (message.header.type){
-            case PROGRAM_INJECTION:
-                if(handleProgramInjection(message,fd) < 0){
+            if(pid == 0){ //child
+                if(handleProgramInjection(fd,message) < 0){
                     cerr<<"Generic Error"<<endl;
+                    sendAck(fd,message.header.service,false); //nack to the service
                     return -1;
                 }
-                break;
-            
-            default:
-                cout<<"Unrecognized Payload Type: 0x"<<hex<<message.header.type<<"\n";
-                break;
+
+            } else { //parent
+
+                Service s(message.header.service,pid);
+                list.addService(s);
+
+                continue;
+            }
+
+        } else {
+            cout<<"Unrecognized Payload Type: 0x"<<hex<<message.header.type<<"\n";
         }
+
     }
 
 
