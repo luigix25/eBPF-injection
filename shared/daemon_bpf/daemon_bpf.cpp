@@ -106,7 +106,7 @@ int handler_ringbuf(void *ctx, void *data, size_t){
     hdr->type = PROGRAM_INJECTION_RESULT;
     hdr->version = 1;
 
-    memcpy(hdr+sizeof(hdr),&event->payload,hdr->payload_len);
+    memcpy((char*)hdr+sizeof(*hdr),&event->payload,hdr->payload_len);
 
     //For debug
     //uint64_t *ptr = (uint64_t*)&event->payload;
