@@ -4,50 +4,14 @@ import os
 import sys
 import asyncio
 from qemu.qmp import QMPClient
+import ebpf_service
 
 HOST = "127.0.0.1"  # The server's hostname or IP address
 PORT = 9999  # The port used by the server
 
 PROTOCOL_VERSION = bytes([1])
 SERVICE_TYPE = bytes([1])
-PROGRAM_INJECTION = bytes([1])
-PROGRAM_INJECTION_ACK = bytes([2])
-PROGRAM_INJECTION_RESULT = bytes([3])
-PROGRAM_INJECTION_UNLOAD = bytes([4])
 
-class bpf_injection_msg_header:
-    STRUCT_FORMAT = '=ccch'
-    size = struct.calcsize(STRUCT_FORMAT)
-
-    def __init__(self, protocol, type, service, size): # costruttore
-        self.version = protocol
-        self.type = type
-        self.service = service
-        self.size = size
-
-    def from_bytes(bytes): # costruttore
-        data = struct.unpack(bpf_injection_msg_header.STRUCT_FORMAT,bytes)
-        return bpf_injection_msg_header(data[0],data[1],data[2],data[3])
-
-    def pack(self):
-        return struct.pack(bpf_injection_msg_header.STRUCT_FORMAT,self.version,self.type,self.service,self.size)
-
-    def __str__(self):
-        return f"Version: {self.version} Type: {self.type} Service: {self.service} Size: {self.size}"
-
-class bpf_injection_ack:
-    STRUCT_FORMAT = '=c'
-    INJECTION_OK = bytes([0])
-    INJECTION_FAIL = bytes([1])
-
-    size = struct.calcsize(STRUCT_FORMAT)
-
-    def __init__(self, bytes): # costruttore
-        data = struct.unpack(bpf_injection_ack.STRUCT_FORMAT,bytes)
-        self.status = data[0]
-
-    def __str__(self):
-        return f"Status: {self.status}"
 
 class bpf_injection_result:
     STRUCT_FORMAT = '=qq'
@@ -106,7 +70,10 @@ async def main(argv):
     cpu = list(map(prova,res))
     await qmp.disconnect()
 
-    header = bpf_injection_msg_header(PROTOCOL_VERSION,PROGRAM_INJECTION,SERVICE_TYPE,file_size).pack()
+    header_obj = ebpf_service.bpf_injection_msg_header(PROTOCOL_VERSION,ebpf_service.PROGRAM_INJECTION,SERVICE_TYPE,file_size)
+
+    header = header_obj.pack()
+    print(header_obj)
 
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s, open(argv[1], "rb") as f:
         s.connect((HOST, PORT))
@@ -117,34 +84,18 @@ async def main(argv):
 
         print("Program Injected")
 
-        #waiting for ack
-        data = s.recv(bpf_injection_msg_header.size)
-        header = bpf_injection_msg_header.from_bytes(data)
-
-        print(header)
-        if(header.type != PROGRAM_INJECTION_ACK):
-            print("Protocol error")
+        if ebpf_service.initial_handshake(s) < 0:
+            print("Injection not ok")
             sys.exit(-1)
 
-        data = s.recv(bpf_injection_ack.size)
-        status_obj = bpf_injection_ack(data)
-        print(status_obj)
+        print("Injection Ok")
 
-        if(status_obj.status == bpf_injection_ack.INJECTION_OK):
-            print("Injection ok!\n")
-        else:
-            print("Injection not ok!\n")
-            sys.exit(-1)
 
         while True:
-            data = s.recv(bpf_injection_msg_header.size)
-            header = bpf_injection_msg_header.from_bytes(data)
-
-            if header.type != PROGRAM_INJECTION_RESULT:
-                print("Protocol error")
+            data =  ebpf_service.get_result(s)
+            if data == -1:
                 sys.exit(-1)
 
-            data = s.recv(bpf_injection_result.size)
             result_obj = bpf_injection_result(data)
             handle_data_result(result_obj,cpu)
 
