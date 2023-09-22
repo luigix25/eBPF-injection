@@ -169,6 +169,19 @@ int handleProgramInjection(int dev_fd, bpf_injection_msg_t message){
     }
 }
 
+/*This function will kill the service, if found */
+void kill_service(ServiceList &list, const bpf_injection_msg_t &message){
+
+    Service s = list.findService(message.header.service);
+
+    if(s.service_id != (uint8_t)-1){
+        cout<<"Unloading Service n: "<<(int)s.service_id<<"\n";
+        kill(s.pid,SIGKILL);
+        list.removeService(s);
+    }
+
+}
+
 int main(){
 
     cout<<"[LOG] Starting Guest Agent"<<endl;
@@ -187,16 +200,8 @@ int main(){
 
         if(message.header.type == PROGRAM_INJECTION){
 
-            Service s = list.findService(message.header.service);
-            pid_t pid;
-
-            if(s.service_id != (uint8_t)-1){
-                cout<<"Unloading Service n: "<<(int)s.service_id<<"\n";
-                kill(s.pid,SIGKILL);
-            }
-
-
-            pid = fork();
+            kill_service(list, message); //Kill running service, if any
+            pid_t pid = fork();
 
             if(pid == 0){ //child
                 if(handleProgramInjection(fd,message) < 0){
@@ -213,6 +218,8 @@ int main(){
                 continue;
             }
 
+        } else if(message.header.type == PROGRAM_INJECTION_UNLOAD){
+            kill_service(list, message);
         } else {
             cout<<"Unrecognized Payload Type: 0x"<<hex<<message.header.type<<"\n";
         }
