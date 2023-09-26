@@ -12,15 +12,12 @@
 #define MAX_ENTRIES 4096	//must be a power of two
 #define FIREWALL_TYPE 3
 
-// Using BPF_MAP_TYPE_ARRAY map type all array elements pre-allocated 
-// and zero initialized at init time
-
 enum rule {DROP, ACCEPT, UNKNOWN = -1};
 
-struct bpf_map_def SEC("maps") bpf_ringbuffer = {
-	.type = BPF_MAP_TYPE_RINGBUF,
-	.max_entries = MAX_ENTRIES,
-};
+struct {
+	__uint(type, BPF_MAP_TYPE_RINGBUF);
+	__uint(max_entries, MAX_ENTRIES);
+} bpf_ringbuffer SEC(".maps");
 
 struct {
 	__uint(type, BPF_MAP_TYPE_PERCPU_ARRAY);
@@ -38,7 +35,7 @@ struct {
 
 #define MAX_STRLEN 20
 
-typedef struct{
+typedef struct __attribute__((__packed__)){
 	const char table_name[MAX_STRLEN];
 	const char chain_name[MAX_STRLEN];
 	uint32_t ip;

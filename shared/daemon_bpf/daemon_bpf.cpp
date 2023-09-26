@@ -64,7 +64,7 @@ bpf_injection_msg_t recv_bpf_injection_msg(int fd){
 
 	cout<<"Waiting for a bpf_message_header.."<<endl;
 	len = read(fd, &(mymsg.header), sizeof(bpf_injection_msg_header));
-	if (len < 0) {
+	if (len < (int32_t)sizeof(bpf_injection_msg_header)) {
 	    perror("read: ");
 	    return mymsg;
 	}

@@ -10,8 +10,6 @@ HOST = "127.0.0.1"  # The server's hostname or IP address
 PORT = 9999  # The port used by the server
 
 PROTOCOL_VERSION = bytes([1])
-SERVICE_TYPE = bytes([1])
-
 
 class bpf_injection_result:
     STRUCT_FORMAT = '=qq'
@@ -70,7 +68,7 @@ async def main(argv):
     cpu = list(map(prova,res))
     await qmp.disconnect()
 
-    header_obj = ebpf_service.bpf_injection_msg_header(PROTOCOL_VERSION,ebpf_service.PROGRAM_INJECTION,SERVICE_TYPE,file_size)
+    header_obj = ebpf_service.bpf_injection_msg_header(PROTOCOL_VERSION,ebpf_service.PROGRAM_INJECTION,ebpf_service.VCPU_TYPE,file_size)
 
     header = header_obj.pack()
     print(header_obj)

@@ -5,6 +5,10 @@ PROGRAM_INJECTION_ACK = bytes([2])
 PROGRAM_INJECTION_RESULT = bytes([3])
 PROGRAM_INJECTION_UNLOAD = bytes([4])
 
+VCPU_TYPE = bytes([1])
+MEMORY_TYPE = bytes([2])
+FIREWALL_TYPE = bytes([3])
+
 class bpf_injection_msg_header:
     STRUCT_FORMAT = '=ccch'
     size = struct.calcsize(STRUCT_FORMAT)
